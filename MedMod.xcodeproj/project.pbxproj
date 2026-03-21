@@ -6,13 +6,59 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		04317EB3E48CCAD4D559E16A /* LocalClinicalRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 477A2BEBAEE6F6E2D2C86A6B /* LocalClinicalRecord.swift */; };
+		1A317867E401A23B2A29430B /* HealthKitFHIRService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6015F1D2DA45930934DEFF7C /* HealthKitFHIRService.swift */; };
+		1A542809EE6BCBDF20FA9D74 /* ClinicalAssistantView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C816AE77DD6454CB2637457E /* ClinicalAssistantView.swift */; };
+		44F3303D7DB2BA0D5BEB8A21 /* PatientDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 857CBEA07A008ED7A0450048 /* PatientDashboardView.swift */; };
+		4F7CC22813D7F98853327D40 /* Appointment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3216E94335B4A0C2B6040B65 /* Appointment.swift */; };
+		64A2BFFE245CCCB80E3DA13A /* iPadClinicalToolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = F06BA028B761EAF34422F1C0 /* iPadClinicalToolbar.swift */; };
+		78162E9CFB9844BA25B1489F /* LocalMedication.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05D2B0CF7B340FA9CDA0EF89 /* LocalMedication.swift */; };
+		7DF471DD0C4D0851F1C224C5 /* VisitHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8DF3A9020BA9EADDBDFC94A /* VisitHistoryView.swift */; };
+		861308D33CF777BF6E472939 /* PatientProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D10BDB296EAB413E5A62954 /* PatientProfile.swift */; };
+		A45BD8EAA8B601A0F555BB20 /* ClinicalExamView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3DE85CB9E737A8DDCF6D7B3 /* ClinicalExamView.swift */; };
+		B0D9E598B3F7CA88A2EEF0B8 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26B45237647A7C6DCBE5FF08 /* ContentView.swift */; };
+		C0A76207F09E40B519830493 /* AnatomicalRealityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF7855B24EB71D70A9964FB9 /* AnatomicalRealityView.swift */; };
+		CAED3500772905E2050EDF40 /* ClinicalPDFDocumentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E5363527F07041AEB61FC76 /* ClinicalPDFDocumentView.swift */; };
+		CDF5C9F08BF1826E6CA07A28 /* FemaleHeadModel.usdz in Resources */ = {isa = PBXBuildFile; fileRef = DC9A16A80795F7862616B3A0 /* FemaleHeadModel.usdz */; };
+		D6EE09E76503318474E22C04 /* EHRMainShellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 939036AEB667D95E79903847 /* EHRMainShellView.swift */; };
+		D9E8C303766CECD44F23F33D /* MedModApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F9F8D1F0B26ED5877D9DCF6 /* MedModApp.swift */; };
+		DA62306DC54BDC1A953AB13C /* RxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A18A33F4C5D0FC585C999796 /* RxView.swift */; };
+		F6875639D812019E354F1395 /* SubViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49D80228411DD26C6F03665E /* SubViews.swift */; };
+		FA9B3177B8B4E01C9B41B50C /* ClinicalIntelligenceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A68223F0EA234FB0C1B4C36 /* ClinicalIntelligenceService.swift */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
+		05D2B0CF7B340FA9CDA0EF89 /* LocalMedication.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = LocalMedication.swift; path = MedMod/Models/LocalMedication.swift; sourceTree = "<group>"; };
+		26B45237647A7C6DCBE5FF08 /* ContentView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ContentView.swift; path = MedMod/ContentView.swift; sourceTree = "<group>"; };
+		3216E94335B4A0C2B6040B65 /* Appointment.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = Appointment.swift; path = MedMod/Models/Appointment.swift; sourceTree = "<group>"; };
+		3E5363527F07041AEB61FC76 /* ClinicalPDFDocumentView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ClinicalPDFDocumentView.swift; path = MedMod/Views/ClinicalPDFDocumentView.swift; sourceTree = "<group>"; };
+		477A2BEBAEE6F6E2D2C86A6B /* LocalClinicalRecord.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = LocalClinicalRecord.swift; path = MedMod/Models/LocalClinicalRecord.swift; sourceTree = "<group>"; };
+		49D80228411DD26C6F03665E /* SubViews.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SubViews.swift; path = MedMod/Views/SubViews.swift; sourceTree = "<group>"; };
+		4A68223F0EA234FB0C1B4C36 /* ClinicalIntelligenceService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ClinicalIntelligenceService.swift; path = MedMod/AI/ClinicalIntelligenceService.swift; sourceTree = "<group>"; };
+		6015F1D2DA45930934DEFF7C /* HealthKitFHIRService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HealthKitFHIRService.swift; path = MedMod/Services/HealthKitFHIRService.swift; sourceTree = "<group>"; };
+		7829FC1A8D4AD0C4CC5D34E1 /* FemaleHeadModel.usdz */ = {isa = PBXFileReference; includeInIndex = 1; path = FemaleHeadModel.usdz; sourceTree = "<group>"; };
+		845F532186DC7AA72A0D4E87 /* MedMod.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = MedMod.entitlements; sourceTree = "<group>"; };
+		857CBEA07A008ED7A0450048 /* PatientDashboardView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PatientDashboardView.swift; path = MedMod/Views/PatientDashboardView.swift; sourceTree = "<group>"; };
+		8D10BDB296EAB413E5A62954 /* PatientProfile.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PatientProfile.swift; path = MedMod/Models/PatientProfile.swift; sourceTree = "<group>"; };
+		939036AEB667D95E79903847 /* EHRMainShellView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = EHRMainShellView.swift; path = MedMod/Views/EHRMainShellView.swift; sourceTree = "<group>"; };
+		9F9F8D1F0B26ED5877D9DCF6 /* MedModApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MedModApp.swift; path = MedMod/MedModApp.swift; sourceTree = "<group>"; };
+		A18A33F4C5D0FC585C999796 /* RxView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RxView.swift; path = MedMod/Views/RxView.swift; sourceTree = "<group>"; };
+		AB3D0EDFF44C59917A538E82 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B0E5CC2C2F6E215A00788827 /* MedMod.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MedMod.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C816AE77DD6454CB2637457E /* ClinicalAssistantView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ClinicalAssistantView.swift; path = MedMod/Views/ClinicalAssistantView.swift; sourceTree = "<group>"; };
+		D8DF3A9020BA9EADDBDFC94A /* VisitHistoryView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = VisitHistoryView.swift; path = MedMod/Views/VisitHistoryView.swift; sourceTree = "<group>"; };
+		DC9A16A80795F7862616B3A0 /* FemaleHeadModel.usdz */ = {isa = PBXFileReference; includeInIndex = 1; path = FemaleHeadModel.usdz; sourceTree = "<group>"; };
+		E3DE85CB9E737A8DDCF6D7B3 /* ClinicalExamView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ClinicalExamView.swift; path = MedMod/Views/ClinicalExamView.swift; sourceTree = "<group>"; };
+		EF7855B24EB71D70A9964FB9 /* AnatomicalRealityView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AnatomicalRealityView.swift; path = MedMod/Views/AnatomicalRealityView.swift; sourceTree = "<group>"; };
+		F06BA028B761EAF34422F1C0 /* iPadClinicalToolbar.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = iPadClinicalToolbar.swift; path = MedMod/Views/iPadClinicalToolbar.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		B0E5CC2E2F6E215A00788827 /* MedMod */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = MedMod;
 			sourceTree = "<group>";
 		};
@@ -34,6 +80,28 @@
 			children = (
 				B0E5CC2E2F6E215A00788827 /* MedMod */,
 				B0E5CC2D2F6E215A00788827 /* Products */,
+				8D10BDB296EAB413E5A62954 /* PatientProfile.swift */,
+				3216E94335B4A0C2B6040B65 /* Appointment.swift */,
+				05D2B0CF7B340FA9CDA0EF89 /* LocalMedication.swift */,
+				477A2BEBAEE6F6E2D2C86A6B /* LocalClinicalRecord.swift */,
+				4A68223F0EA234FB0C1B4C36 /* ClinicalIntelligenceService.swift */,
+				857CBEA07A008ED7A0450048 /* PatientDashboardView.swift */,
+				F06BA028B761EAF34422F1C0 /* iPadClinicalToolbar.swift */,
+				C816AE77DD6454CB2637457E /* ClinicalAssistantView.swift */,
+				49D80228411DD26C6F03665E /* SubViews.swift */,
+				E3DE85CB9E737A8DDCF6D7B3 /* ClinicalExamView.swift */,
+				D8DF3A9020BA9EADDBDFC94A /* VisitHistoryView.swift */,
+				3E5363527F07041AEB61FC76 /* ClinicalPDFDocumentView.swift */,
+				939036AEB667D95E79903847 /* EHRMainShellView.swift */,
+				A18A33F4C5D0FC585C999796 /* RxView.swift */,
+				EF7855B24EB71D70A9964FB9 /* AnatomicalRealityView.swift */,
+				26B45237647A7C6DCBE5FF08 /* ContentView.swift */,
+				6015F1D2DA45930934DEFF7C /* HealthKitFHIRService.swift */,
+				9F9F8D1F0B26ED5877D9DCF6 /* MedModApp.swift */,
+				845F532186DC7AA72A0D4E87 /* MedMod.entitlements */,
+				AB3D0EDFF44C59917A538E82 /* Info.plist */,
+				DC9A16A80795F7862616B3A0 /* FemaleHeadModel.usdz */,
+				7829FC1A8D4AD0C4CC5D34E1 /* FemaleHeadModel.usdz */,
 			);
 			sourceTree = "<group>";
 		};
@@ -64,8 +132,6 @@
 				B0E5CC2E2F6E215A00788827 /* MedMod */,
 			);
 			name = MedMod;
-			packageProductDependencies = (
-			);
 			productName = MedMod;
 			productReference = B0E5CC2C2F6E215A00788827 /* MedMod.app */;
 			productType = "com.apple.product-type.application";
@@ -109,6 +175,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CDF5C9F08BF1826E6CA07A28 /* FemaleHeadModel.usdz in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -119,6 +186,24 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				861308D33CF777BF6E472939 /* PatientProfile.swift in Sources */,
+				4F7CC22813D7F98853327D40 /* Appointment.swift in Sources */,
+				78162E9CFB9844BA25B1489F /* LocalMedication.swift in Sources */,
+				04317EB3E48CCAD4D559E16A /* LocalClinicalRecord.swift in Sources */,
+				FA9B3177B8B4E01C9B41B50C /* ClinicalIntelligenceService.swift in Sources */,
+				44F3303D7DB2BA0D5BEB8A21 /* PatientDashboardView.swift in Sources */,
+				64A2BFFE245CCCB80E3DA13A /* iPadClinicalToolbar.swift in Sources */,
+				1A542809EE6BCBDF20FA9D74 /* ClinicalAssistantView.swift in Sources */,
+				F6875639D812019E354F1395 /* SubViews.swift in Sources */,
+				A45BD8EAA8B601A0F555BB20 /* ClinicalExamView.swift in Sources */,
+				7DF471DD0C4D0851F1C224C5 /* VisitHistoryView.swift in Sources */,
+				CAED3500772905E2050EDF40 /* ClinicalPDFDocumentView.swift in Sources */,
+				D6EE09E76503318474E22C04 /* EHRMainShellView.swift in Sources */,
+				DA62306DC54BDC1A953AB13C /* RxView.swift in Sources */,
+				C0A76207F09E40B519830493 /* AnatomicalRealityView.swift in Sources */,
+				B0D9E598B3F7CA88A2EEF0B8 /* ContentView.swift in Sources */,
+				1A317867E401A23B2A29430B /* HealthKitFHIRService.swift in Sources */,
+				D9E8C303766CECD44F23F33D /* MedModApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -246,6 +331,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = MedMod/MedMod.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = Z3E334EXZD;
@@ -253,7 +339,8 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MedMod/Info.plist;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -290,6 +377,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = MedMod/MedMod.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = Z3E334EXZD;
@@ -297,7 +385,8 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MedMod/Info.plist;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;

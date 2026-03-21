@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SwiftData
 
 @main
 struct MedModApp: App {
@@ -13,5 +14,11 @@ struct MedModApp: App {
         WindowGroup {
             ContentView()
         }
+        .modelContainer(for: [
+            PatientProfile.self,
+            LocalClinicalRecord.self,
+            LocalMedication.self,
+            Appointment.self
+        ])
     }
 }
