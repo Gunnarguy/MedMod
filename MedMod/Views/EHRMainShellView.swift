@@ -4,6 +4,10 @@ import SwiftData
 struct EHRMainShellView: View {
     @State private var activeTab: TabSelection = .patient
 
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
+
     enum TabSelection {
         case agenda, patient, inbox
     }
@@ -16,24 +20,32 @@ struct EHRMainShellView: View {
                 }
                 .tag(TabSelection.agenda)
 
-            PatientDashboardView()
-                .tabItem {
-                    Label("Patient", systemImage: "person.crop.circle")
+            // On iPad, show the split-view dashboard; on iPhone, show the simpler list
+            Group {
+                #if os(iOS)
+                if horizontalSizeClass == .regular {
+                    iPadClinicalDashboard()
+                } else {
+                    PatientDashboardView()
                 }
-                .tag(TabSelection.patient)
+                #else
+                iPadClinicalDashboard()
+                #endif
+            }
+            .tabItem {
+                Label("Patient", systemImage: "person.crop.circle")
+            }
+            .tag(TabSelection.patient)
 
             InboxView()
                 .tabItem {
                     Label("IntraMail", systemImage: "envelope")
                 }
-                .badge(9)
                 .tag(TabSelection.inbox)
         }
+        #if os(iOS)
+        .tabBarMinimizeBehavior(.onScrollDown)
+        #endif
         .tint(.purple)
     }
-}
-
-#Preview {
-    EHRMainShellView()
-        .modelContainer(for: PatientProfile.self, inMemory: true)
 }

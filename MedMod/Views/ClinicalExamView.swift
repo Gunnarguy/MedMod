@@ -3,173 +3,206 @@ import SwiftData
 
 struct ClinicalExamView: View {
     let patient: PatientProfile
-    @Environment(\.modelContext) private var modelContext
-    @StateObject private var intelligenceService = ClinicalIntelligenceService()
-
-    @State private var selectedAnatomy: String? = nil
-    @State private var dictationText: String = "Found a 2mm basal cell carcinoma here. Patient states it has been bleeding for two weeks."
-    @State private var isProcessing = false
-    @State private var generatedNote: ClinicalVisitNote?
-    @State private var generatedPDFURL: URL?
+    @StateObject private var workflowState = ClinicalWorkflowState()
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Liquid Glass Top Navigation Wrapper (iPad Section 3.4)
-            iPadClinicalToolbar()
-                .padding(.top, 10)
-                .padding(.bottom, 10)
-                .zIndex(1)
+        ClinicalExamWorkspace(patient: patient, workflowState: workflowState)
+            .navigationTitle("3D Clinical Exam")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+    }
+}
 
-            HStack(spacing: 0) {
-                // Section 4: 3D Anatomical Atlas (Left side)
-                ZStack {
-                    #if os(macOS)
-                    Color(NSColor.windowBackgroundColor)
-                    #else
-                    Color(UIColor.systemBackground)
-                    #endif
+struct ClinicalExamWorkspace: View {
+    let patient: PatientProfile
+    @ObservedObject var workflowState: ClinicalWorkflowState
 
-                    AnatomicalRealityView(selectedAnatomy: $selectedAnatomy)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .clipShape(RoundedRectangle(cornerRadius: 16))
-                .padding()
+    @Environment(\.modelContext) private var modelContext
+    @StateObject private var intelligenceService = ClinicalIntelligenceService()
+    @State private var dictationText = ""
+    @State private var showAtlas = true
 
-                // Section 5.1: Clinical AI Integration (Right side)
-                VStack(alignment: .leading, spacing: 20) {
-                    Text("Clinical Intelligence")
-                        .font(.title2)
-                        .bold()
-                        .foregroundColor(.purple)
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    private var isCompact: Bool { sizeClass == .compact }
+    #else
+    private var isCompact: Bool { false }
+    #endif
 
-                    if let part = selectedAnatomy {
-                        HStack {
-                            Image(systemName: "viewfinder")
-                            Text("Spatial Focus: \(part)")
-                        }
-                        .font(.subheadline)
-                        .padding(8)
-                        .background(.purple.opacity(0.1))
-                        .cornerRadius(8)
-                    }
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Dictation").font(.headline)
-                        #if os(iOS)
-                        TextEditor(text: $dictationText)
-                            .frame(height: 120)
-                            .padding(4)
-                            .background(Color(UIColor.secondarySystemBackground))
-                            .cornerRadius(8)
-                        #else
-                        TextEditor(text: $dictationText)
-                            .frame(height: 120)
-                            .padding(4)
-                            .background(Color(NSColor.controlBackgroundColor))
-                            .cornerRadius(8)
-                        #endif
-                    }
-
-                    Button(action: runAIWorkflow) {
-                        HStack {
-                            if isProcessing {
-                                ProgressView()
-                                    .padding(.trailing, 4)
-                            } else {
-                                Image(systemName: "waveform.circle.fill")
-                            }
-                            Text(isProcessing ? "Processing via Local ~3B Model..." : "Process Diagnostics")
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        #if os(iOS)
-                        .foregroundColor(.white)
-                        .background(Color.purple)
-                        #else
-                        .background(Color.purple)
-                        #endif
-                        .cornerRadius(12)
-                    }
-                    .disabled(isProcessing)
-
-                    Divider()
-
-                    // Display Section 2.2: Structured Output
-                    if let note = generatedNote {
-                        ScrollView {
-                            VStack(alignment: .leading, spacing: 12) {
-                                Text("Structured Output generated by FoundationModels")
-                                    .font(.caption)
-                                    .foregroundColor(.gray)
-
-                                clinicalDataRow(title: "CC/HPI", value: note.ccHPI)
-                                clinicalDataRow(title: "Exam", value: note.examFindings)
-                                clinicalDataRow(title: "Plan", value: note.impressionsAndPlan)
-                            }
-                        }
-                        .frame(maxHeight: 250)
-
-                        // Section 5.2: Generate PDF
-                        Button(action: {
-                            generateAndSaveDocument(note: note)
-                        }) {
-                            Label("Sign & Generate PDF", systemImage: "signature")
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                #if os(iOS)
-                                .foregroundColor(.white)
-                                .background(Color.blue)
-                                #else
-                                .background(Color.blue)
-                                #endif
-                                .cornerRadius(12)
-                        }
-                    }
-
-                    if let url = generatedPDFURL {
-                        HStack {
-                            Image(systemName: "checkmark.seal.fill")
-                                .foregroundColor(.green)
-                            Text("Stored locally: \(url.lastPathComponent)")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-
-                    Spacer()
-                }
-                .padding()
-                .frame(width: 400)
-                #if os(iOS)
-                .background(Color(UIColor.secondarySystemBackground))
-                #else
-                .background(Color(NSColor.windowBackgroundColor))
-                #endif
+    var body: some View {
+        Group {
+            if isCompact {
+                compactLayout
+            } else {
+                regularLayout
             }
         }
-        .navigationTitle("Exam Space")
-        #if os(iOS)
-        .navigationBarTitleDisplayMode(.inline)
-        #endif
     }
 
+    // MARK: - iPad / Wide Layout
+
+    private var regularLayout: some View {
+        HStack(spacing: 0) {
+            // Left: 3D Atlas
+            MedicalAtlasView(selectedAnatomy: $workflowState.selectedAnatomy)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            // Right: Intelligence panel
+            ScrollView {
+                intelligencePanel
+            }
+            .frame(width: 380)
+            #if os(iOS)
+            .background(Color(UIColor.secondarySystemBackground))
+            #else
+            .background(Color(NSColor.windowBackgroundColor))
+            #endif
+        }
+    }
+
+    // MARK: - iPhone / Compact Layout
+
+    private var compactLayout: some View {
+        VStack(spacing: 0) {
+            // Atlas lives OUTSIDE ScrollView so RealityKit gestures aren't stolen
+            DisclosureGroup(isExpanded: $showAtlas) {
+                MedicalAtlasView(selectedAnatomy: $workflowState.selectedAnatomy)
+                    .frame(height: 340)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            } label: {
+                Label("3D Anatomical Atlas", systemImage: "cube.transparent")
+                    .font(.headline)
+            }
+            .padding(.horizontal)
+            .padding(.top, 8)
+
+            // Only the intelligence panel scrolls
+            ScrollView {
+                intelligencePanel
+            }
+        }
+    }
+
+    // MARK: - Shared Intelligence Panel
+
+    private var intelligencePanel: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            // Spatial focus
+            if let part = workflowState.selectedAnatomy {
+                HStack(spacing: 6) {
+                    Image(systemName: "scope")
+                        .foregroundColor(.red)
+                    Text(AnatomicalRealityView.displayName(for: part))
+                        .fontWeight(.medium)
+                }
+                .font(.subheadline)
+                .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.purple.opacity(0.1))
+                .cornerRadius(8)
+            }
+
+            // Dictation
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Dictation")
+                    .font(.headline)
+                Text("Describe your clinical findings")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                #if os(iOS)
+                TextEditor(text: $dictationText)
+                    .frame(minHeight: 80, maxHeight: 140)
+                    .padding(4)
+                    .background(Color(UIColor.tertiarySystemBackground))
+                    .cornerRadius(8)
+                #else
+                TextEditor(text: $dictationText)
+                    .frame(minHeight: 80, maxHeight: 140)
+                    .padding(4)
+                    .background(Color(NSColor.controlBackgroundColor))
+                    .cornerRadius(8)
+                #endif
+            }
+
+            // Process button
+            Button(action: runAIWorkflow) {
+                HStack {
+                    if workflowState.isProcessing {
+                        ProgressView()
+                            .padding(.trailing, 4)
+                    } else {
+                        Image(systemName: "waveform.circle.fill")
+                    }
+                    Text(workflowState.isProcessing ? "Processing..." : "Process Diagnostics")
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .foregroundColor(.white)
+                .background(dictationText.isEmpty && workflowState.selectedAnatomy == nil ? Color.gray : Color.purple)
+                .cornerRadius(12)
+            }
+            .disabled(workflowState.isProcessing || (dictationText.isEmpty && workflowState.selectedAnatomy == nil))
+
+            // Structured output
+            if let note = workflowState.generatedNote {
+                Divider()
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("AI Structured Output")
+                        .font(.caption.bold())
+                        .foregroundColor(.secondary)
+
+                    clinicalDataRow(title: "CC / HPI", value: note.ccHPI)
+                    clinicalDataRow(title: "Review of Systems", value: note.reviewOfSystems)
+                    clinicalDataRow(title: "Exam Findings", value: note.examFindings)
+                    clinicalDataRow(title: "Impression & Plan", value: note.impressionsAndPlan)
+
+                    if !note.affectedAnatomicalZones.isEmpty {
+                        clinicalDataRow(title: "Anatomical Zones", value: note.affectedAnatomicalZones.map { AnatomicalRealityView.displayName(for: $0) }.joined(separator: ", "))
+                    }
+                }
+
+                // PDF generation
+                Button(action: { generateAndSaveDocument(note: note) }) {
+                    Label("Sign & Generate PDF", systemImage: "signature")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .foregroundColor(.white)
+                        .background(Color.blue)
+                        .cornerRadius(12)
+                }
+            }
+
+            if let url = workflowState.generatedPDFURL {
+                HStack {
+                    Image(systemName: "checkmark.seal.fill")
+                        .foregroundColor(.green)
+                    Text(url.lastPathComponent)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
+        .padding()
+    }
+
+    // MARK: - Actions
+
     private func runAIWorkflow() {
-        isProcessing = true
-        var contextualDictation = dictationText
-        if let part = selectedAnatomy {
-            contextualDictation = "[Anatomical Focus: \(part)] " + contextualDictation
+        workflowState.isProcessing = true
+        var prompt = dictationText
+        if let part = workflowState.selectedAnatomy {
+            prompt = "[Anatomical Focus: \(part)] " + prompt
         }
 
         Task {
             do {
-                let note = try await intelligenceService.generateStructuredNote(from: contextualDictation)
-                await MainActor.run {
-                    self.generatedNote = note
-                    self.isProcessing = false
-                }
+                let note = try await intelligenceService.generateStructuredNote(from: prompt)
+                workflowState.generatedNote = note
+                workflowState.isProcessing = false
             } catch {
-                print("Inference error: \(error)")
-                await MainActor.run { self.isProcessing = false }
+                workflowState.isProcessing = false
             }
         }
     }
@@ -180,22 +213,27 @@ struct ClinicalExamView: View {
             dateRecorded: Date(),
             conditionName: note.impressionsAndPlan,
             status: "Final",
-            isHiddenFromPortal: false
+            isHiddenFromPortal: false,
+            ccHPI: note.ccHPI,
+            reviewOfSystems: note.reviewOfSystems,
+            examFindings: note.examFindings,
+            impressionsAndPlan: note.impressionsAndPlan,
+            affectedAnatomicalZones: note.affectedAnatomicalZones,
+            providerSignature: "\(patient.firstName) \(patient.lastName) Provider"
         )
         modelContext.insert(record)
-        // Note: Assuming patient.clinicalRecords is an optional array as defined:
         patient.clinicalRecords?.append(record)
         try? modelContext.save()
 
         if let url = generatePDFLocally(patient: patient, record: record, details: note) {
-            generatedPDFURL = url
+            workflowState.generatedPDFURL = url
         }
     }
 
     private func clinicalDataRow(title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(.caption).bold().foregroundColor(.secondary)
-            Text(value).font(.body)
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title).font(.caption.bold()).foregroundColor(.purple)
+            Text(value).font(.callout)
         }
     }
 }
