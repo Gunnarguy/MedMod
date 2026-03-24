@@ -25,6 +25,11 @@ struct ChartNotesView: View {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(record.conditionName)
                                         .font(.headline)
+                                    if let visitType = record.visitType {
+                                        Text(visitType)
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
                                     Text(record.dateRecorded, format: .dateTime.month().day().year())
                                         .font(.caption)
                                         .foregroundColor(.secondary)
@@ -51,6 +56,13 @@ struct ChartNotesView: View {
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                                     .lineLimit(2)
+                            }
+
+                            if let followUpPlan = record.followUpPlan, !followUpPlan.isEmpty {
+                                Text(followUpPlan)
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(1)
                             }
                         }
                         .padding(.vertical, 4)

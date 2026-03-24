@@ -1,5 +1,7 @@
 import SwiftUI
 import SwiftData
+import Combine
+import os
 
 struct ClinicalAssistantView: View {
     let patient: PatientProfile
@@ -13,12 +15,25 @@ struct ClinicalAssistantView: View {
     private var quickPrompts: [String] {
         [
             "Does \(patient.firstName) have a history of Basal Cell Carcinoma?",
-            "What medications are on file for \(patient.firstName)?"
+            "What medications are on file for \(patient.firstName)?",
+            "When is the next follow-up and what is it for?",
+            "What allergies or risk flags should I know before treatment?"
         ]
     }
 
     var body: some View {
         VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: "cpu")
+                    .foregroundColor(.secondary)
+                Text(intelligenceService.engineStatusLabel)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Spacer()
+            }
+            .padding(.horizontal)
+            .padding(.top, 8)
+
             // Quick prompts
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
@@ -101,7 +116,7 @@ struct ClinicalAssistantView: View {
         #endif
         .onAppear {
             if chatHistory.isEmpty {
-                chatHistory.append((isUser: false, text: "I'm your on-device clinical assistant for \(patient.firstName) \(patient.lastName). Ask me anything about their records."))
+                chatHistory.append((isUser: false, text: "I'm your on-device clinical assistant for \(patient.fullName). I can summarize visits, medications, allergies, risk flags, and upcoming follow-up directly from the local chart."))
             }
         }
     }
@@ -114,15 +129,18 @@ struct ClinicalAssistantView: View {
 
     private func askAssistant(with query: String) {
         guard !query.isEmpty else { return }
+        AppLogger.assistant.info("💬 Patient query: \(query.prefix(80))")
         chatHistory.append((isUser: true, text: query))
         isProcessing = true
 
         Task {
             do {
                 let response = try await intelligenceService.executeToolQuery(query: query, modelContext: modelContext, patient: patient)
+                AppLogger.assistant.info("✅ Assistant response: \(response.count) chars")
                 chatHistory.append((isUser: false, text: response))
                 isProcessing = false
             } catch {
+                AppLogger.assistant.error("❌ Assistant query failed: \(error.localizedDescription)")
                 chatHistory.append((isUser: false, text: "Error: \(error.localizedDescription)"))
                 isProcessing = false
             }

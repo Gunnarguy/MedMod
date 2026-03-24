@@ -17,10 +17,15 @@ struct ClinicalPDFDocumentView: View {
         self.patient = patient
         self.visitNote = record
         self.clinicalDetails = ClinicalVisitNote(
+            primaryDiagnosis: record.conditionName,
             ccHPI: record.ccHPI ?? record.conditionName,
             reviewOfSystems: record.reviewOfSystems ?? "",
             examFindings: record.examFindings ?? "",
             impressionsAndPlan: record.impressionsAndPlan ?? record.conditionName,
+            patientInstructions: record.patientInstructions ?? "",
+            followUpPlan: record.followUpPlan ?? "Follow up per clinician recommendation.",
+            recommendedOrders: record.recommendedOrders ?? [],
+            medicationChanges: [],
             affectedAnatomicalZones: record.affectedAnatomicalZones ?? []
         )
     }
@@ -48,6 +53,9 @@ struct ClinicalPDFDocumentView: View {
 
             // Body Content mirroring Image 9
             VStack(alignment: .leading, spacing: 12) {
+                Text("Primary Diagnosis:").bold()
+                Text(clinicalDetails.primaryDiagnosis)
+
                 Text("Chief Complaint:").bold()
                 Text(clinicalDetails.ccHPI)
 
@@ -62,12 +70,25 @@ struct ClinicalPDFDocumentView: View {
                 Text("Impression/Plan:").bold()
                 Text(clinicalDetails.impressionsAndPlan)
 
-                if !clinicalDetails.affectedAnatomicalZones.isEmpty {
-                    Text("Anatomical Zones:").bold()
-                    Text(clinicalDetails.affectedAnatomicalZones.joined(separator: ", "))
+                if !clinicalDetails.patientInstructions.isEmpty {
+                    Text("Patient Instructions:").bold()
+                    Text(clinicalDetails.patientInstructions)
                 }
 
-                Text("Follow up in 1 year").bold()
+                if !clinicalDetails.followUpPlan.isEmpty {
+                    Text("Follow-Up:").bold()
+                    Text(clinicalDetails.followUpPlan)
+                }
+
+                if !clinicalDetails.recommendedOrders.isEmpty {
+                    Text("Orders / Referrals:").bold()
+                    Text(clinicalDetails.recommendedOrders.joined(separator: "\n- ").withLeadingDash)
+                }
+
+                if !clinicalDetails.affectedAnatomicalZones.isEmpty {
+                    Text("Anatomical Zones:").bold()
+                    Text(clinicalDetails.affectedAnatomicalZones.map { AnatomicalRegion.displayName(for: $0) }.joined(separator: ", "))
+                }
             }
             .font(.system(size: 12))
 
@@ -106,4 +127,10 @@ func generatePDFLocally(patient: PatientProfile, record: LocalClinicalRecord, de
     }
 
     return url
+}
+
+private extension String {
+    var withLeadingDash: String {
+        isEmpty ? self : "- \(self)"
+    }
 }

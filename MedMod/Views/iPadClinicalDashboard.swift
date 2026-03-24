@@ -1,11 +1,14 @@
 import SwiftUI
 import SwiftData
+import os
 
 struct iPadClinicalDashboard: View {
     @Query(sort: \PatientProfile.lastName) private var patients: [PatientProfile]
     @State private var selectedPatientID: UUID?
     @StateObject private var workflowState = ClinicalWorkflowState()
     @State private var showInspector = false
+    @State private var activeToolbarSection = "Chart"
+    @State private var showExamFromToolbar = false
 
     private var selectedPatient: PatientProfile? {
         if let selectedPatientID {
@@ -18,6 +21,7 @@ struct iPadClinicalDashboard: View {
         NavigationSplitView {
             PatientAgendaList(patients: patients, selection: $selectedPatientID)
                 .navigationTitle("Patients")
+                .onAppear { AppLogger.dashboard.info("📋 Patient sidebar loaded — \(patients.count) patients") }
         } detail: {
             if let patient = selectedPatient {
                 PatientChartDetail(patient: patient, workflowState: workflowState, showInspector: $showInspector)
@@ -32,8 +36,41 @@ struct iPadClinicalDashboard: View {
         .inspector(isPresented: $showInspector) {
             VisitSettingsInspector(patient: selectedPatient, workflowState: workflowState)
         }
-        .onChange(of: selectedPatientID) { _, _ in
+        .overlay(alignment: .bottom) {
+            iPadClinicalToolbar(activeSection: $activeToolbarSection) { section in
+                handleToolbarAction(section)
+            }
+            .padding(.bottom, 8)
+        }
+        .sheet(isPresented: $showExamFromToolbar) {
+            if let patient = selectedPatient {
+                NavigationStack {
+                    ClinicalExamWorkspace(patient: patient, workflowState: workflowState)
+                        .navigationTitle("Clinical Encounter")
+                        .toolbar {
+                            ToolbarItem(placement: .topBarTrailing) {
+                                Button("Done") { showExamFromToolbar = false }
+                            }
+                        }
+                }
+            }
+        }
+        .onChange(of: selectedPatientID) { oldVal, newVal in
+            AppLogger.dashboard.info("👤 Patient selection changed: \(String(describing: oldVal)) → \(String(describing: newVal))")
             workflowState.reset()
+        }
+    }
+
+    private func handleToolbarAction(_ section: String) {
+        AppLogger.dashboard.info("🔧 Toolbar action: \(section)")
+        switch section {
+        case "Encounter":
+            AppLogger.dashboard.info("🩺 Opening Clinical Encounter sheet")
+            showExamFromToolbar = true
+        case "Settings":
+            AppLogger.dashboard.info("⚙️ Toggling inspector: \(!showInspector)")
+            showInspector.toggle()
+        default: break
         }
     }
 }
@@ -44,11 +81,25 @@ struct PatientAgendaList: View {
     let patients: [PatientProfile]
     @Binding var selection: UUID?
 
+    /// Today's patients sorted by appointment time (workflow order)
+    private var todayPatients: [(patient: PatientProfile, appointment: Appointment)] {
+        let cal = Calendar.current
+        var pairs: [(patient: PatientProfile, appointment: Appointment)] = []
+        for patient in patients {
+            for appt in patient.appointments ?? [] {
+                if cal.isDateInToday(appt.scheduledTime) {
+                    pairs.append((patient, appt))
+                }
+            }
+        }
+        return pairs.sorted { $0.appointment.scheduledTime < $1.appointment.scheduledTime }
+    }
+
     var body: some View {
         List(selection: $selection) {
-            ForEach(patients) { patient in
-                NavigationLink(value: patient.id) {
-                    PatientAgendaRow(patient: patient)
+            ForEach(todayPatients, id: \.appointment.id) { pair in
+                NavigationLink(value: pair.patient.id) {
+                    PatientAgendaRow(patient: pair.patient, appointment: pair.appointment)
                 }
             }
         }
@@ -57,7 +108,7 @@ struct PatientAgendaList: View {
         #endif
         .onAppear {
             if selection == nil {
-                selection = patients.first?.id
+                selection = todayPatients.first?.patient.id
             }
         }
     }
@@ -65,34 +116,44 @@ struct PatientAgendaList: View {
 
 struct PatientAgendaRow: View {
     let patient: PatientProfile
-
-    private var nextAppointment: Appointment? {
-        patient.appointments?
-            .sorted(by: { $0.scheduledTime < $1.scheduledTime })
-            .first
-    }
+    let appointment: Appointment
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("\(patient.firstName) \(patient.lastName)")
-                .font(.headline)
-            if let appt = nextAppointment {
-                Text(appt.reasonForVisit)
-                    .font(.subheadline)
-                Text(appt.scheduledTime, format: .dateTime.month().day().hour().minute())
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                Text("No upcoming visits")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        HStack(spacing: 10) {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(AgendaView.workflowColor(for: appointment.status))
+                .frame(width: 3, height: 36)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("\(patient.firstName) \(patient.lastName)")
+                        .font(.subheadline.weight(.semibold))
+                    Spacer()
+                    Text(appointment.scheduledTime, format: .dateTime.hour().minute())
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+                HStack {
+                    Text(appointment.reasonForVisit)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    Spacer()
+                    Text(appointment.status)
+                        .font(.caption2.weight(.medium))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(AgendaView.workflowColor(for: appointment.status).opacity(0.15))
+                        .foregroundStyle(AgendaView.workflowColor(for: appointment.status))
+                        .clipShape(Capsule())
+                }
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 2)
     }
 }
 
-// MARK: - Chart Detail (no more inline atlas — atlas lives in exam workspace only)
+// MARK: - Chart Detail (no more inline atlas - atlas lives in exam workspace only)
 
 struct PatientChartDetail: View {
     let patient: PatientProfile
@@ -107,6 +168,72 @@ struct PatientChartDetail: View {
     }
     private var medications: [LocalMedication] {
         (patient.medications ?? []).sorted { $0.writtenDate > $1.writtenDate }
+    }
+
+    private var clinicalAlerts: [ClinicalAlert] {
+        var alerts: [ClinicalAlert] = []
+        let meds = patient.medications ?? []
+        let medNames = meds.map { $0.medicationName.lowercased() }
+
+        // Drug interaction: Methotrexate + NSAIDs
+        if medNames.contains(where: { $0.contains("methotrexate") }) {
+            alerts.append(ClinicalAlert(
+                icon: "pills.circle.fill", color: .red, title: "Methotrexate Monitoring",
+                message: "Patient on methotrexate — verify CBC and LFTs within last 30 days."
+            ))
+        }
+
+        // Biologics monitoring
+        if medNames.contains(where: { $0.contains("dupixent") || $0.contains("dupilumab") }) {
+            alerts.append(ClinicalAlert(
+                icon: "syringe.fill", color: .orange, title: "Biologic Therapy",
+                message: "Dupixent patient — assess for conjunctivitis and injection site reactions."
+            ))
+        }
+
+        if medNames.contains(where: { $0.contains("humira") || $0.contains("adalimumab") }) {
+            alerts.append(ClinicalAlert(
+                icon: "syringe.fill", color: .orange, title: "TNF Inhibitor",
+                message: "Humira patient — screen for TB and monitor for infection signs."
+            ))
+        }
+
+        // Smoker + skin cancer risk
+        if patient.isSmoker && (patient.clinicalRecords ?? []).contains(where: {
+            $0.conditionName.lowercased().contains("melanoma") || $0.conditionName.lowercased().contains("carcinoma")
+        }) {
+            alerts.append(ClinicalAlert(
+                icon: "exclamationmark.triangle.fill", color: .red, title: "High-Risk Patient",
+                message: "Current smoker with skin cancer history — prioritize full-body skin exam."
+            ))
+        } else if patient.isSmoker {
+            alerts.append(ClinicalAlert(
+                icon: "smoke.fill", color: .orange, title: "Smoking Status",
+                message: "Current smoker — consider cessation counseling and wound healing implications."
+            ))
+        }
+
+        // Allergy warnings
+        let highRiskAllergies = patient.allergies.filter { a in
+            let lower = a.lowercased()
+            return lower.contains("penicillin") || lower.contains("sulfa") || lower.contains("latex") || lower.contains("nsaid")
+        }
+        if !highRiskAllergies.isEmpty {
+            alerts.append(ClinicalAlert(
+                icon: "allergens.fill", color: .yellow, title: "Allergy Alert",
+                message: "Documented allergies: \(highRiskAllergies.joined(separator: ", "))"
+            ))
+        }
+
+        // Risk flags
+        if !patient.riskFlags.isEmpty {
+            alerts.append(ClinicalAlert(
+                icon: "flag.fill", color: .purple, title: "Risk Flags",
+                message: patient.riskFlags.joined(separator: " • ")
+            ))
+        }
+
+        return alerts
     }
 
     var body: some View {
@@ -135,16 +262,42 @@ struct PatientChartDetail: View {
                 }
             }
 
+            // Clinical Decision Support Alerts
+            if !clinicalAlerts.isEmpty {
+                Section {
+                    ForEach(clinicalAlerts, id: \.message) { alert in
+                        HStack(spacing: 10) {
+                            Image(systemName: alert.icon)
+                                .foregroundColor(alert.color)
+                                .font(.body.weight(.semibold))
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(alert.title)
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundColor(alert.color)
+                                Text(alert.message)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
+                } header: {
+                    Label("CLINICAL ALERTS", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.red)
+                }
+            }
+
             // Clinical actions
             Section("Clinical Workflow") {
                 Button {
                     showingExamWorkspace = true
                 } label: {
-                    Label("Open 3D Clinical Exam", systemImage: "waveform.path.ecg.rectangle")
+                    Label("Open Clinical Encounter", systemImage: "waveform.path.ecg.rectangle")
                 }
                 .tint(.purple)
 
-                NavigationLink(destination: ClinicalAssistantView(patient: patient)) {
+                NavigationLink(destination: ClinicIntelligenceView(patient: patient)) {
                     Label("Clinical AI Assistant", systemImage: "brain.head.profile")
                 }
 
@@ -231,7 +384,7 @@ struct PatientChartDetail: View {
         .sheet(isPresented: $showingExamWorkspace) {
             NavigationStack {
                 ClinicalExamWorkspace(patient: patient, workflowState: workflowState)
-                    .navigationTitle("3D Clinical Exam")
+                    .navigationTitle("Clinical Encounter")
                     .toolbar {
                         ToolbarItem(placement: .topBarTrailing) {
                             Button("Done") { showingExamWorkspace = false }
@@ -250,6 +403,15 @@ struct PatientChartDetail: View {
     }
 }
 
+// MARK: - Clinical Alert Model
+
+struct ClinicalAlert {
+    let icon: String
+    let color: Color
+    let title: String
+    let message: String
+}
+
 // MARK: - Inspector
 
 struct VisitSettingsInspector: View {
@@ -261,21 +423,27 @@ struct VisitSettingsInspector: View {
             if let patient {
                 Form {
                     Section("Patient") {
-                        LabeledContent("Name", value: "\(patient.firstName) \(patient.lastName)")
+                        LabeledContent("Name", value: patient.fullName)
+                        LabeledContent("MRN", value: patient.medicalRecordNumber)
                         LabeledContent("DOB", value: patient.dateOfBirth.formatted(date: .abbreviated, time: .omitted))
+                        LabeledContent("Age", value: "\(patient.age)")
                         LabeledContent("Gender", value: patient.gender)
                         LabeledContent("Smoking", value: patient.isSmoker ? "Yes" : "No")
+                        LabeledContent("Clinician", value: patient.primaryClinician ?? "Not assigned")
+                        LabeledContent("Pharmacy", value: patient.preferredPharmacy ?? "Not documented")
                     }
 
                     Section("AI Draft") {
                         if let note = workflowState.generatedNote {
                             VStack(alignment: .leading, spacing: 6) {
+                                Text(note.primaryDiagnosis).font(.headline)
                                 Text(note.ccHPI)
                                 Text(note.examFindings).font(.caption).foregroundStyle(.secondary)
                                 Text(note.impressionsAndPlan).font(.caption).foregroundStyle(.secondary)
+                                Text(note.followUpPlan).font(.caption).foregroundStyle(.secondary)
                             }
                         } else {
-                            Text("Run the 3D exam to generate").foregroundStyle(.secondary)
+                            Text("Open Clinical Encounter to generate").foregroundStyle(.secondary)
                         }
                     }
 
@@ -287,7 +455,12 @@ struct VisitSettingsInspector: View {
                             ForEach(meds) { rx in
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(rx.medicationName)
-                                    Text(rx.quantityInfo).font(.caption).foregroundStyle(.secondary)
+                                    Text([rx.dose, rx.route, rx.frequency].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " | "))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                    if let indication = rx.indication {
+                                        Text(indication).font(.caption2).foregroundStyle(.secondary)
+                                    }
                                 }
                             }
                         }
@@ -295,7 +468,7 @@ struct VisitSettingsInspector: View {
 
                     if let anatomy = workflowState.selectedAnatomy {
                         Section("Anatomical Focus") {
-                            Text(AnatomicalRealityView.displayName(for: anatomy))
+                            Text(AnatomicalRegion.displayName(for: anatomy))
                                 .font(.body.monospaced())
                         }
                     }
@@ -316,14 +489,4 @@ struct VisitSettingsInspector: View {
     }
 }
 
-// MARK: - Atlas wrapper (used from exam workspace)
-
-struct MedicalAtlasView: View {
-    @Binding var selectedAnatomy: String?
-
-    var body: some View {
-        AnatomicalRealityView(selectedAnatomy: $selectedAnatomy)
-            .background(.black.opacity(0.04))
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-    }
-}
+// MedicalAtlasView removed — clinical encounters now use voice dictation + region picker

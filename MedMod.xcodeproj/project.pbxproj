@@ -15,8 +15,6 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		B0E5CC2E2F6E215A00788827 /* MedMod */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = MedMod;
 			sourceTree = "<group>";
 		};

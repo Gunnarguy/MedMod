@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import os
 
 @MainActor
 final class ClinicalWorkflowState: ObservableObject {
@@ -9,6 +10,7 @@ final class ClinicalWorkflowState: ObservableObject {
     @Published var isProcessing = false
 
     func reset() {
+        AppLogger.workflow.info("🔄 Workflow state reset")
         selectedAnatomy = nil
         generatedNote = nil
         generatedPDFURL = nil

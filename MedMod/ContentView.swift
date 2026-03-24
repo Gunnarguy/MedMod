@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import os
 
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
@@ -8,40 +9,51 @@ struct ContentView: View {
     var body: some View {
         EHRMainShellView()
             .onAppear {
+                AppLogger.data.info("ContentView appeared — \(patients.count) patients in database")
                 if patients.isEmpty {
+                    AppLogger.data.info("🌱 First launch detected — seeding mock data")
                     addMockData()
+                } else {
+                    AppLogger.data.info("📋 Database already seeded — refreshing supplemental data")
+                    refreshSupplementalDemoData()
                 }
             }
     }
 
     // swiftlint:disable function_body_length
     private func addMockData() {
+        let cal = Calendar.current
+        let todayBase = cal.startOfDay(for: Date())
+        func todayAt(_ h: Int, _ m: Int) -> Date {
+            cal.date(bySettingHour: h, minute: m, second: 0, of: todayBase)!
+        }
+
         // ──────────────────────────────────────────────
         // MARK: – Patients
         // ──────────────────────────────────────────────
 
-        let janeDoe = PatientProfile(firstName: "Jane", lastName: "Doe",
+        let janeDoe = PatientProfile(medicalRecordNumber: "MM-1001", firstName: "Catherine", lastName: "Hartley",
             dateOfBirth: Date(timeIntervalSince1970: 181872000), // Oct 7 1975
             gender: "Female", isSmoker: true)
 
-        let mariaSantos = PatientProfile(firstName: "Maria", lastName: "Santos",
+        let mariaSantos = PatientProfile(medicalRecordNumber: "MM-1002", firstName: "Maria", lastName: "Santos",
             dateOfBirth: Date(timeIntervalSince1970: 315532800), // Jan 1 1980
             gender: "Female", isSmoker: false)
 
-        let robertChen = PatientProfile(firstName: "Robert", lastName: "Chen",
+        let robertChen = PatientProfile(medicalRecordNumber: "MM-1003", firstName: "Robert", lastName: "Chen",
             dateOfBirth: Date(timeIntervalSince1970: 86400000), // Sep 9 1972
             gender: "Male", isSmoker: false)
 
-        let sarahJohnson = PatientProfile(firstName: "Sarah", lastName: "Johnson",
+        let sarahJohnson = PatientProfile(medicalRecordNumber: "MM-1004", firstName: "Sarah", lastName: "Johnson",
             dateOfBirth: Date(timeIntervalSince1970: 631152000), // Jan 1 1990
             gender: "Female", isSmoker: false)
 
-        let davidWilliams = PatientProfile(firstName: "David", lastName: "Williams",
+        let davidWilliams = PatientProfile(medicalRecordNumber: "MM-1005", firstName: "David", lastName: "Williams",
             dateOfBirth: Date(timeIntervalSince1970: 473385600), // Jan 1 1985
             gender: "Male", isSmoker: true)
 
         // ──────────────────────────────────────────────
-        // MARK: – Jane Doe — BCC history, hyperlipidemia
+        // MARK: – Catherine Hartley — BCC history, hyperlipidemia
         // ──────────────────────────────────────────────
 
         let janeMed1 = LocalMedication(rxID: "RX-001", medicationName: "Simvastatin 20mg",
@@ -85,8 +97,8 @@ struct ContentView: View {
             providerSignature: "Dr. Smith, MD")
 
         let janeAppt1 = Appointment(appointmentID: "APT-001",
-            scheduledTime: Date().addingTimeInterval(86400 * 2),
-            reasonForVisit: "6-week post-cryo check", status: "Scheduled")
+            scheduledTime: todayAt(8, 30),
+            reasonForVisit: "Post-cryo AK follow-up", status: "Ready for Checkout")
         let janeAppt2 = Appointment(appointmentID: "APT-002",
             scheduledTime: Date().addingTimeInterval(86400 * 365),
             reasonForVisit: "Annual skin exam", status: "Scheduled")
@@ -129,8 +141,8 @@ struct ContentView: View {
             providerSignature: "Dr. Jones, MD")
 
         let mariaAppt1 = Appointment(appointmentID: "APT-003",
-            scheduledTime: Date().addingTimeInterval(86400 * 5),
-            reasonForVisit: "Acne/rosacea follow-up", status: "Scheduled")
+            scheduledTime: todayAt(9, 30),
+            reasonForVisit: "Acne/rosacea follow-up", status: "Checked In")
         let mariaAppt2 = Appointment(appointmentID: "APT-004",
             scheduledTime: Date().addingTimeInterval(86400 * 42),
             reasonForVisit: "Rosacea 6-week check", status: "Scheduled")
@@ -182,8 +194,8 @@ struct ContentView: View {
             providerSignature: "Dr. Smith, MD")
 
         let robertAppt1 = Appointment(appointmentID: "APT-005",
-            scheduledTime: Date().addingTimeInterval(86400 * 3),
-            reasonForVisit: "Psoriasis — methotrexate labs review", status: "Scheduled")
+            scheduledTime: todayAt(8, 15),
+            reasonForVisit: "Psoriasis — methotrexate labs review", status: "Completed")
         let robertAppt2 = Appointment(appointmentID: "APT-006",
             scheduledTime: Date().addingTimeInterval(86400 * 180),
             reasonForVisit: "6-month melanoma surveillance", status: "Scheduled")
@@ -229,8 +241,8 @@ struct ContentView: View {
             providerSignature: "Dr. Jones, MD")
 
         let sarahAppt1 = Appointment(appointmentID: "APT-007",
-            scheduledTime: Date().addingTimeInterval(86400 * 1),
-            reasonForVisit: "Dupilumab injection + 8-week check", status: "Scheduled")
+            scheduledTime: todayAt(8, 45),
+            reasonForVisit: "Dupilumab injection + 8-week check", status: "In Exam")
         let sarahAppt2 = Appointment(appointmentID: "APT-008",
             scheduledTime: Date().addingTimeInterval(86400 * 14),
             reasonForVisit: "Patch testing — nickel panel", status: "Scheduled")
@@ -284,14 +296,70 @@ struct ContentView: View {
             scheduledTime: Date().addingTimeInterval(86400 * 7),
             reasonForVisit: "Wart cryo retreatment + rosacea check", status: "Scheduled")
         let davidAppt2 = Appointment(appointmentID: "APT-010",
-            scheduledTime: Date().addingTimeInterval(86400 * 0.5),
-            reasonForVisit: "Urgent — new rapidly growing lesion", status: "Scheduled")
+            scheduledTime: todayAt(9, 0),
+            reasonForVisit: "Urgent: new rapidly growing lesion", status: "In Exam")
+
+        // ──────────────────────────────────────────────
+        // MARK: – Schedule-Only Patients (fill out realistic daily volume)
+        // ──────────────────────────────────────────────
+
+        let thomasRandall = PatientProfile(medicalRecordNumber: "MM-2001", firstName: "Thomas", lastName: "Randall",
+            dateOfBirth: Date(timeIntervalSince1970: 220924800), gender: "Male", isSmoker: false)
+        let margaretLiu = PatientProfile(medicalRecordNumber: "MM-2002", firstName: "Margaret", lastName: "Liu",
+            dateOfBirth: Date(timeIntervalSince1970: 157766400), gender: "Female", isSmoker: false)
+        let patriciaOkafor = PatientProfile(medicalRecordNumber: "MM-2003", firstName: "Patricia", lastName: "Okafor",
+            dateOfBirth: Date(timeIntervalSince1970: 347155200), gender: "Female", isSmoker: false)
+        let carlosRivera = PatientProfile(medicalRecordNumber: "MM-2004", firstName: "Carlos", lastName: "Rivera",
+            dateOfBirth: Date(timeIntervalSince1970: 126230400), gender: "Male", isSmoker: true)
+        let helenWhitfield = PatientProfile(medicalRecordNumber: "MM-2005", firstName: "Helen", lastName: "Whitfield",
+            dateOfBirth: Date(timeIntervalSince1970: 63072000), gender: "Female", isSmoker: false)
+        let jamesFoster = PatientProfile(medicalRecordNumber: "MM-2006", firstName: "James", lastName: "Foster",
+            dateOfBirth: Date(timeIntervalSince1970: 536457600), gender: "Male", isSmoker: false)
+        let jeromeWashington = PatientProfile(medicalRecordNumber: "MM-2007", firstName: "Jerome", lastName: "Washington",
+            dateOfBirth: Date(timeIntervalSince1970: 410227200), gender: "Male", isSmoker: false)
+        let anikaPatel = PatientProfile(medicalRecordNumber: "MM-2008", firstName: "Anika", lastName: "Patel",
+            dateOfBirth: Date(timeIntervalSince1970: 694224000), gender: "Female", isSmoker: false)
+        let williamNakamura = PatientProfile(medicalRecordNumber: "MM-2009", firstName: "William", lastName: "Nakamura",
+            dateOfBirth: Date(timeIntervalSince1970: 252460800), gender: "Male", isSmoker: false)
+        let lisaTran = PatientProfile(medicalRecordNumber: "MM-2010", firstName: "Lisa", lastName: "Tran",
+            dateOfBirth: Date(timeIntervalSince1970: 441763200), gender: "Female", isSmoker: false)
+        let derekSimmons = PatientProfile(medicalRecordNumber: "MM-2011", firstName: "Derek", lastName: "Simmons",
+            dateOfBirth: Date(timeIntervalSince1970: 315532800), gender: "Male", isSmoker: false)
+
+        let schedAppt11 = Appointment(appointmentID: "APT-011",
+            scheduledTime: todayAt(7, 45), reasonForVisit: "Psoriasis biologic injection", status: "Completed")
+        let schedAppt12 = Appointment(appointmentID: "APT-012",
+            scheduledTime: todayAt(8, 0), reasonForVisit: "Annual skin exam", status: "Completed")
+        let schedAppt13 = Appointment(appointmentID: "APT-013",
+            scheduledTime: todayAt(9, 15), reasonForVisit: "Mohs surgery consult", status: "Roomed")
+        let schedAppt14 = Appointment(appointmentID: "APT-014",
+            scheduledTime: todayAt(9, 45), reasonForVisit: "AK cryotherapy session", status: "Checked In")
+        let schedAppt15 = Appointment(appointmentID: "APT-015",
+            scheduledTime: todayAt(10, 0), reasonForVisit: "Biopsy pathology review", status: "Confirmed")
+        let schedAppt16 = Appointment(appointmentID: "APT-016",
+            scheduledTime: todayAt(10, 30), reasonForVisit: "New patient: suspicious mole evaluation", status: "Confirmed")
+        let schedAppt17 = Appointment(appointmentID: "APT-017",
+            scheduledTime: todayAt(11, 0), reasonForVisit: "Vitiligo follow-up", status: "Scheduled")
+        let schedAppt18 = Appointment(appointmentID: "APT-018",
+            scheduledTime: todayAt(13, 0), reasonForVisit: "Full body skin exam", status: "Scheduled")
+        let schedAppt19 = Appointment(appointmentID: "APT-019",
+            scheduledTime: todayAt(13, 30), reasonForVisit: "Eczema flare visit", status: "Scheduled")
+        let schedAppt20 = Appointment(appointmentID: "APT-020",
+            scheduledTime: todayAt(14, 0), reasonForVisit: "Cosmetic: Botox follow-up", status: "Scheduled")
+        let schedAppt21 = Appointment(appointmentID: "APT-021",
+            scheduledTime: todayAt(14, 30), reasonForVisit: "Wound check — excision site", status: "Scheduled")
+
+        let schedulePatients = [thomasRandall, margaretLiu, patriciaOkafor, carlosRivera, helenWhitfield,
+                                jamesFoster, jeromeWashington, anikaPatel, williamNakamura, lisaTran, derekSimmons]
+        let scheduleAppts = [schedAppt11, schedAppt12, schedAppt13, schedAppt14, schedAppt15,
+                             schedAppt16, schedAppt17, schedAppt18, schedAppt19, schedAppt20, schedAppt21]
 
         // ──────────────────────────────────────────────
         // MARK: – Insert All Entities
         // ──────────────────────────────────────────────
 
-        let allPatients = [janeDoe, mariaSantos, robertChen, sarahJohnson, davidWilliams]
+        let corePatients = [janeDoe, mariaSantos, robertChen, sarahJohnson, davidWilliams]
+        let allPatients = corePatients + schedulePatients
         let allMeds = [janeMed1, janeMed2, janeMed3,
                        mariaMed1, mariaMed2, mariaMed3, mariaMed4,
                        robertMed1, robertMed2, robertMed3, robertMed4,
@@ -306,7 +374,9 @@ struct ContentView: View {
                         mariaAppt1, mariaAppt2,
                         robertAppt1, robertAppt2,
                         sarahAppt1, sarahAppt2,
-                        davidAppt1, davidAppt2]
+                        davidAppt1, davidAppt2] + scheduleAppts
+
+        configureDemoData(patients: allPatients, medications: allMeds, records: allRecords, appointments: allAppts)
 
         for p in allPatients { modelContext.insert(p) }
         for m in allMeds { modelContext.insert(m) }
@@ -337,7 +407,333 @@ struct ContentView: View {
         davidWilliams.clinicalRecords = [davidRec1, davidRec2, davidRec3]
         davidWilliams.appointments = [davidAppt1, davidAppt2]
 
+        // Schedule-only patients — just appointment relationships
+        thomasRandall.appointments = [schedAppt11]
+        margaretLiu.appointments = [schedAppt12]
+        patriciaOkafor.appointments = [schedAppt13]
+        carlosRivera.appointments = [schedAppt14]
+        helenWhitfield.appointments = [schedAppt15]
+        jamesFoster.appointments = [schedAppt16]
+        jeromeWashington.appointments = [schedAppt17]
+        anikaPatel.appointments = [schedAppt18]
+        williamNakamura.appointments = [schedAppt19]
+        lisaTran.appointments = [schedAppt20]
+        derekSimmons.appointments = [schedAppt21]
+
         try? modelContext.save()
+    }
+
+    private func refreshSupplementalDemoData() {
+        let cal = Calendar.current
+        let todayBase = cal.startOfDay(for: Date())
+
+        var movedCount = 0
+        for patient in patients {
+            for appt in patient.appointments ?? [] {
+                let comps = cal.dateComponents([.hour, .minute], from: appt.scheduledTime)
+                if let h = comps.hour, let m = comps.minute,
+                   let fresh = cal.date(bySettingHour: h, minute: m, second: 0, of: todayBase),
+                   !cal.isDateInToday(appt.scheduledTime) {
+                    appt.scheduledTime = fresh
+                    movedCount += 1
+                }
+            }
+        }
+        AppLogger.data.info("🔄 Refreshed appointments: \(movedCount) moved to today")
+
+        let medications = patients.flatMap { $0.medications ?? [] }
+        let records = patients.flatMap { $0.clinicalRecords ?? [] }
+        let appointments = patients.flatMap { $0.appointments ?? [] }
+
+        AppLogger.data.info("📊 Demo data totals: \(patients.count) patients, \(medications.count) meds, \(records.count) records, \(appointments.count) appointments")
+        configureDemoData(patients: patients, medications: medications, records: records, appointments: appointments)
+        try? modelContext.save()
+    }
+
+    private func configureDemoData(
+        patients: [PatientProfile],
+        medications: [LocalMedication],
+        records: [LocalClinicalRecord],
+        appointments: [Appointment]
+    ) {
+        for patient in patients {
+            switch patient.fullName {
+            case "Catherine Hartley":
+                applyPatientMetadata(
+                    patient,
+                    primaryClinician: "Dr. Elizabeth Smith, MD",
+                    preferredPharmacy: "Harbor Care Pharmacy",
+                    allergies: ["Sulfonamide antibiotics", "Adhesive tape"],
+                    riskFlags: ["Current smoker", "High cumulative UV exposure", "History of basal cell carcinoma"],
+                    carePlanSummary: "Annual full-body surveillance with expedited review for any bleeding or non-healing lesion.",
+                    emergencyContactName: "Michael Hartley",
+                    emergencyContactPhone: "(555) 010-1001",
+                    bloodType: "A+"
+                )
+            case "Maria Santos":
+                applyPatientMetadata(
+                    patient,
+                    primaryClinician: "Dr. Natalie Jones, MD",
+                    preferredPharmacy: "Downtown Family Pharmacy",
+                    allergies: ["No known drug allergies"],
+                    riskFlags: ["Rosacea triggers: heat, spicy food, exertion", "Post-inflammatory hyperpigmentation risk"],
+                    carePlanSummary: "Continue acne maintenance while controlling rosacea triggers and monitoring for ocular symptoms.",
+                    emergencyContactName: "Elena Santos",
+                    emergencyContactPhone: "(555) 010-1002",
+                    bloodType: "O+"
+                )
+            case "Robert Chen":
+                applyPatientMetadata(
+                    patient,
+                    primaryClinician: "Dr. Elizabeth Smith, MD",
+                    preferredPharmacy: "Northside Specialty Pharmacy",
+                    allergies: ["Penicillin"],
+                    riskFlags: ["Melanoma history", "Possible psoriatic arthritis", "Immunomodulator monitoring required"],
+                    carePlanSummary: "Maintain q6-month melanoma surveillance while monitoring methotrexate safety labs and joint symptoms.",
+                    emergencyContactName: "Angela Chen",
+                    emergencyContactPhone: "(555) 010-1003",
+                    bloodType: "B+"
+                )
+            case "Sarah Johnson":
+                applyPatientMetadata(
+                    patient,
+                    primaryClinician: "Dr. Natalie Jones, MD",
+                    preferredPharmacy: "Northside Specialty Pharmacy",
+                    allergies: ["Nickel", "Fragrance mix"],
+                    riskFlags: ["Severe atopic dermatitis history", "Atopic triad", "Biologic prior authorization in progress"],
+                    carePlanSummary: "Sustain Dupilumab response, maintain barrier repair, and avoid confirmed contact allergens.",
+                    emergencyContactName: "Alex Johnson",
+                    emergencyContactPhone: "(555) 010-1004",
+                    bloodType: "AB+"
+                )
+            case "David Williams":
+                applyPatientMetadata(
+                    patient,
+                    primaryClinician: "Dr. Elizabeth Smith, MD",
+                    preferredPharmacy: "Harbor Care Pharmacy",
+                    allergies: ["No known drug allergies"],
+                    riskFlags: ["Current smoker", "Occupational sun exposure", "Possible ocular rosacea"],
+                    carePlanSummary: "Continue rosacea control, monitor ocular symptoms, and keep a low threshold for lesion biopsy.",
+                    emergencyContactName: "Lisa Williams",
+                    emergencyContactPhone: "(555) 010-1005",
+                    bloodType: "O-"
+                )
+            default:
+                break
+            }
+        }
+
+        for medication in medications {
+            switch medication.rxID {
+            case "RX-001":
+                applyMedicationMetadata(medication, genericName: "Simvastatin", dose: "20 mg", route: "Oral", frequency: "Nightly", indication: "Hyperlipidemia", status: "Active", lastFilledDaysAgo: 12, nextRefillInDays: 18, pharmacyName: "Harbor Care Pharmacy", safetyNotes: ["Monitor for myalgias", "Avoid grapefruit excess"])
+            case "RX-002":
+                applyMedicationMetadata(medication, genericName: "Fluorouracil", dose: "5%", route: "Topical", frequency: "Twice daily for 4 weeks", indication: "Field treatment of actinic keratoses", status: "Completed", lastFilledDaysAgo: 58, nextRefillInDays: nil, pharmacyName: "Harbor Care Pharmacy", safetyNotes: ["Expect brisk inflammatory reaction", "Avoid healthy surrounding skin"])
+            case "RX-003":
+                applyMedicationMetadata(medication, genericName: "Tretinoin", dose: "0.05%", route: "Topical", frequency: "Nightly", indication: "Photoaging and AK prophylaxis", status: "Active", lastFilledDaysAgo: 20, nextRefillInDays: 10, pharmacyName: "Harbor Care Pharmacy", safetyNotes: ["Use moisturizer to reduce irritation", "Strict daily sunscreen"])
+            case "RX-004":
+                applyMedicationMetadata(medication, genericName: "Tretinoin", dose: "0.025%", route: "Topical", frequency: "Nightly", indication: "Comedonal acne", status: "Active", lastFilledDaysAgo: 7, nextRefillInDays: 23, pharmacyName: "Downtown Family Pharmacy", safetyNotes: ["May worsen dryness initially"])
+            case "RX-005":
+                applyMedicationMetadata(medication, genericName: "Benzoyl Peroxide", dose: "5%", route: "Topical", frequency: "Every morning", indication: "Inflammatory acne", status: "Active", lastFilledDaysAgo: 7, nextRefillInDays: 21, pharmacyName: "Downtown Family Pharmacy", safetyNotes: ["Bleaches fabrics", "Use non-comedogenic moisturizer"])
+            case "RX-006":
+                applyMedicationMetadata(medication, genericName: "Doxycycline", dose: "100 mg", route: "Oral", frequency: "Twice daily", indication: "Inflammatory acne flare", status: "Tapering", lastFilledDaysAgo: 7, nextRefillInDays: nil, pharmacyName: "Downtown Family Pharmacy", safetyNotes: ["Take with food and water", "Photosensitivity counseling"])
+            case "RX-007":
+                applyMedicationMetadata(medication, genericName: "Metronidazole", dose: "0.75%", route: "Topical", frequency: "Twice daily", indication: "Rosacea", status: "Active", lastFilledDaysAgo: 3, nextRefillInDays: 27, pharmacyName: "Downtown Family Pharmacy", safetyNotes: ["Monitor for burning or dryness"])
+            case "RX-008":
+                applyMedicationMetadata(medication, genericName: "Clobetasol", dose: "0.05%", route: "Topical", frequency: "Twice daily for flare, then weekends", indication: "Plaque psoriasis", status: "Active", lastFilledDaysAgo: 10, nextRefillInDays: 20, pharmacyName: "Northside Specialty Pharmacy", safetyNotes: ["Avoid face/groin", "Limit continuous use due to atrophy risk"])
+            case "RX-009":
+                applyMedicationMetadata(medication, genericName: "Calcipotriene", dose: "0.005%", route: "Topical", frequency: "Daily", indication: "Psoriasis maintenance", status: "Active", lastFilledDaysAgo: 10, nextRefillInDays: 20, pharmacyName: "Northside Specialty Pharmacy", safetyNotes: ["Do not exceed weekly topical amount guidance"])
+            case "RX-010":
+                applyMedicationMetadata(medication, genericName: "Methotrexate", dose: "15 mg", route: "Oral", frequency: "Weekly on Mondays", indication: "Psoriasis with joint symptoms", status: "Active", lastFilledDaysAgo: 5, nextRefillInDays: 25, pharmacyName: "Northside Specialty Pharmacy", safetyNotes: ["CBC/CMP monitoring", "Avoid alcohol excess", "Confirm folic acid adherence"])
+            case "RX-011":
+                applyMedicationMetadata(medication, genericName: "Folic Acid", dose: "1 mg", route: "Oral", frequency: "Daily except Mondays", indication: "Methotrexate supplementation", status: "Active", lastFilledDaysAgo: 5, nextRefillInDays: 25, pharmacyName: "Northside Specialty Pharmacy", safetyNotes: ["Hold on methotrexate day unless instructed otherwise"])
+            case "RX-012":
+                applyMedicationMetadata(medication, genericName: "Triamcinolone", dose: "0.1%", route: "Topical", frequency: "Twice daily for flares", indication: "Atopic dermatitis body flares", status: "Active", lastFilledDaysAgo: 9, nextRefillInDays: 21, pharmacyName: "Northside Specialty Pharmacy", safetyNotes: ["Avoid prolonged uninterrupted use"])
+            case "RX-013":
+                applyMedicationMetadata(medication, genericName: "Tacrolimus", dose: "0.1%", route: "Topical", frequency: "Twice daily as needed", indication: "Face and neck eczema", status: "Active", lastFilledDaysAgo: 9, nextRefillInDays: 21, pharmacyName: "Northside Specialty Pharmacy", safetyNotes: ["Transient burning common in first week"])
+            case "RX-014":
+                applyMedicationMetadata(medication, genericName: "Hydroxyzine", dose: "25 mg", route: "Oral", frequency: "At bedtime as needed", indication: "Nocturnal pruritus", status: "Active", lastFilledDaysAgo: 15, nextRefillInDays: 15, pharmacyName: "Northside Specialty Pharmacy", safetyNotes: ["Sedating", "Avoid driving after dosing"])
+            case "RX-015":
+                applyMedicationMetadata(medication, genericName: "Dupilumab", dose: "300 mg", route: "Subcutaneous", frequency: "Every 2 weeks", indication: "Severe atopic dermatitis", status: "Active", lastFilledDaysAgo: 2, nextRefillInDays: 12, pharmacyName: "Northside Specialty Pharmacy", safetyNotes: ["Monitor for conjunctivitis", "Prior authorization on file"])
+            case "RX-016":
+                applyMedicationMetadata(medication, genericName: "Ceramide moisturizer", dose: nil, route: "Topical", frequency: "Liberally after bathing and as needed", indication: "Skin barrier repair", status: "Active", lastFilledDaysAgo: 5, nextRefillInDays: 25, pharmacyName: "Northside Specialty Pharmacy", safetyNotes: ["Use immediately after bathing"])
+            case "RX-017":
+                applyMedicationMetadata(medication, genericName: "Ivermectin", dose: "1%", route: "Topical", frequency: "Daily", indication: "Papulopustular rosacea", status: "Active", lastFilledDaysAgo: 6, nextRefillInDays: 24, pharmacyName: "Harbor Care Pharmacy", safetyNotes: ["Apply to dry skin only"])
+            case "RX-018":
+                applyMedicationMetadata(medication, genericName: "Azelaic Acid", dose: "15%", route: "Topical", frequency: "Twice daily", indication: "Rosacea erythema and papules", status: "Active", lastFilledDaysAgo: 6, nextRefillInDays: 24, pharmacyName: "Harbor Care Pharmacy", safetyNotes: ["May sting on broken skin"])
+            case "RX-019":
+                applyMedicationMetadata(medication, genericName: "Brimonidine", dose: "0.33%", route: "Topical", frequency: "Once daily as needed", indication: "Rosacea flushing", status: "Active", lastFilledDaysAgo: 6, nextRefillInDays: 24, pharmacyName: "Harbor Care Pharmacy", safetyNotes: ["Counsel about rebound erythema"])
+            case "RX-020":
+                applyMedicationMetadata(medication, genericName: "Imiquimod", dose: "5%", route: "Topical", frequency: "Mon/Wed/Fri at bedtime", indication: "Recalcitrant verruca vulgaris", status: "Active", lastFilledDaysAgo: 4, nextRefillInDays: 26, pharmacyName: "Harbor Care Pharmacy", safetyNotes: ["Wash off after overnight dwell time", "Expected local irritation"])
+            default:
+                break
+            }
+        }
+
+        for record in records {
+            switch record.recordID {
+            case "REC-001":
+                applyRecordMetadata(record, visitType: "Lesion evaluation", severity: "High suspicion", patientInstructions: "Use daily SPF 50+, avoid smoking during wound healing, and report any new bleeding lesions.", followUpPlan: "Surgical excision with 6-week postoperative check.", recommendedOrders: ["Dermatopathology specimen review", "Mohs referral if margins positive"], carePlanSummary: "Confirmed skin cancer pathway with definitive excision and surveillance.")
+            case "REC-002":
+                applyRecordMetadata(record, visitType: "Procedure follow-up", severity: "Moderate", patientInstructions: "Expect crusting after cryotherapy and complete the fluorouracil course unless severe erosion occurs.", followUpPlan: "Return in 8 weeks for field-treatment response check.", recommendedOrders: ["None beyond current cryotherapy session"], carePlanSummary: "Reduce actinic burden and reassess for any persistent SCC concern.")
+            case "REC-003":
+                applyRecordMetadata(record, visitType: "Annual surveillance", severity: "Routine surveillance", patientInstructions: "Perform monthly self-skin checks and return earlier for changing lesions.", followUpPlan: "Annual visit unless a new concerning lesion appears sooner.", recommendedOrders: ["Spot cryotherapy completed in clinic"], carePlanSummary: "Stable surveillance visit with minor residual AK treatment.")
+            case "REC-004":
+                applyRecordMetadata(record, visitType: "New patient acne consult", severity: "Moderate inflammatory", patientInstructions: "Use pea-sized tretinoin, continue benzoyl peroxide in the morning, and avoid lesion picking.", followUpPlan: "Reassess response in 8 weeks.", recommendedOrders: ["Consider hormonal workup only if acne becomes refractory"], carePlanSummary: "Combination topical and oral regimen initiated for inflammatory acne.")
+            case "REC-005":
+                applyRecordMetadata(record, visitType: "Acne follow-up", severity: "Mild rosacea activity", patientInstructions: "Track flushing triggers, use sun protection daily, and report ocular irritation promptly.", followUpPlan: "Rosacea check in 6 weeks with doxycycline taper.", recommendedOrders: ["Ophthalmology evaluation if ocular symptoms emerge"], carePlanSummary: "Acne improved; rosacea added to active problem list.")
+            case "REC-006":
+                applyRecordMetadata(record, visitType: "Pigmented lesion workup", severity: "Urgent oncology workup", patientInstructions: "Keep biopsy site clean, avoid soaking, and await expedited pathology communication.", followUpPlan: "One-week pathology review with likely wide local excision planning.", recommendedOrders: ["Rush pathology"], carePlanSummary: "High-risk pigmented lesion moved to expedited melanoma workflow.")
+            case "REC-007":
+                applyRecordMetadata(record, visitType: "Post-biopsy oncology follow-up", severity: "Cancer surveillance", patientInstructions: "Maintain sun avoidance, perform monthly self-exams, and continue scheduled surveillance.", followUpPlan: "q6-month full-body skin exams for 2 years.", recommendedOrders: ["Final pathology margin confirmation"], carePlanSummary: "Definitive melanoma in situ excision completed with ongoing surveillance.")
+            case "REC-008":
+                applyRecordMetadata(record, visitType: "Chronic disease flare visit", severity: "Moderate-to-severe", patientInstructions: "Complete baseline labs before first methotrexate dose and report fever, cough, or oral ulcers immediately.", followUpPlan: "6-week methotrexate safety and response visit.", recommendedOrders: ["CBC", "CMP", "Hepatitis panel", "Rheumatology referral"], carePlanSummary: "Escalated psoriasis treatment with systemic therapy due to joint symptoms.")
+            case "REC-009":
+                applyRecordMetadata(record, visitType: "Severe eczema flare", severity: "Severe", patientInstructions: "Use soak-and-smear technique nightly, continue emollients aggressively, and monitor for conjunctivitis after Dupilumab start.", followUpPlan: "4-week biologic response check.", recommendedOrders: ["Dupilumab prior authorization", "Baseline photo documentation"], carePlanSummary: "Biologic therapy initiated for uncontrolled atopic dermatitis affecting sleep and quality of life.")
+            case "REC-010":
+                applyRecordMetadata(record, visitType: "Biologic follow-up", severity: "Mild residual eczema plus contact dermatitis", patientInstructions: "Avoid nickel-containing buckles and continue Dupilumab and barrier care.", followUpPlan: "Patch testing and 8-week dermatitis follow-up.", recommendedOrders: ["Extended allergen patch testing"], carePlanSummary: "Strong biologic response with a superimposed localized nickel dermatitis.")
+            case "REC-011":
+                applyRecordMetadata(record, visitType: "Rosacea evaluation", severity: "Moderate with ocular involvement", patientInstructions: "Reduce alcohol and heat triggers, use sunscreen daily, and begin warm compresses and lid hygiene.", followUpPlan: "6-week rosacea reassessment plus ophthalmology evaluation.", recommendedOrders: ["Ophthalmology referral"], carePlanSummary: "Multimodal rosacea regimen started because of ocular and early phymatous features.")
+            case "REC-012":
+                applyRecordMetadata(record, visitType: "Rosacea follow-up and procedure visit", severity: "Improving rosacea with localized wart disease", patientInstructions: "Expect blistering after cryotherapy and keep wart sites clean and dry.", followUpPlan: "Return in 4 weeks for possible wart retreatment.", recommendedOrders: ["Repeat cryotherapy if lesions persist"], carePlanSummary: "Rosacea is improving; wart treatment added for hand lesions.")
+            case "REC-013":
+                applyRecordMetadata(record, visitType: "Skin cancer screening", severity: "Moderate atypia concern", patientInstructions: "Leave biopsy dressing in place for 24 hours and report drainage or redness.", followUpPlan: "7-day pathology review and wound check.", recommendedOrders: ["Shave biopsy pathology"], carePlanSummary: "Atypical nevus biopsied with annual surveillance reinforced due to sun exposure history.")
+            default:
+                break
+            }
+        }
+
+        for appointment in appointments {
+            switch appointment.appointmentID {
+            case "APT-001":
+                applyAppointmentMetadata(appointment, encounterType: "Procedure follow-up", clinicianName: "Dr. Elizabeth Smith, MD", location: "Derm Suite 3", durationMinutes: 20, checkInStatus: "Confirmed", prepInstructions: "Bring wound care questions and current topical medications.", linkedDiagnoses: ["Actinic Keratosis", "Basal Cell Carcinoma surveillance"])
+            case "APT-002":
+                applyAppointmentMetadata(appointment, encounterType: "Annual surveillance", clinicianName: "Dr. Elizabeth Smith, MD", location: "Derm Preventive Clinic", durationMinutes: 30, checkInStatus: "Confirmed", prepInstructions: "Arrive without nail polish or full-body makeup for complete skin exam.", linkedDiagnoses: ["History of basal cell carcinoma"])
+            case "APT-003":
+                applyAppointmentMetadata(appointment, encounterType: "Chronic disease follow-up", clinicianName: "Dr. Natalie Jones, MD", location: "Acne and Rosacea Center", durationMinutes: 25, checkInStatus: "Confirmed", prepInstructions: "Bring photos of worst flare if available.", linkedDiagnoses: ["Acne Vulgaris", "Rosacea"])
+            case "APT-004":
+                applyAppointmentMetadata(appointment, encounterType: "Rosacea follow-up", clinicianName: "Dr. Natalie Jones, MD", location: "Acne and Rosacea Center", durationMinutes: 20, checkInStatus: "Confirmed", prepInstructions: "Avoid applying brimonidine before visit so baseline erythema can be assessed.", linkedDiagnoses: ["Rosacea"])
+            case "APT-005":
+                applyAppointmentMetadata(appointment, encounterType: "Medication safety visit", clinicianName: "Dr. Elizabeth Smith, MD", location: "Derm Infusion and Biologic Clinic", durationMinutes: 25, checkInStatus: "Confirmed", prepInstructions: "Complete CBC/CMP at least 24 hours before visit.", linkedDiagnoses: ["Plaque Psoriasis", "Possible Psoriatic Arthritis"])
+            case "APT-006":
+                applyAppointmentMetadata(appointment, encounterType: "Cancer surveillance", clinicianName: "Dr. Elizabeth Smith, MD", location: "Pigmented Lesion Clinic", durationMinutes: 30, checkInStatus: "Confirmed", prepInstructions: "Bring prior mole maps or outside dermatology records if available.", linkedDiagnoses: ["History of melanoma in situ"])
+            case "APT-007":
+                applyAppointmentMetadata(appointment, encounterType: "Biologic therapy follow-up", clinicianName: "Dr. Natalie Jones, MD", location: "Derm Infusion and Biologic Clinic", durationMinutes: 30, checkInStatus: "Confirmed", prepInstructions: "Bring injection log and note any eye irritation.", linkedDiagnoses: ["Atopic Dermatitis"])
+            case "APT-008":
+                applyAppointmentMetadata(appointment, encounterType: "Patch testing", clinicianName: "Dr. Natalie Jones, MD", location: "Allergy Patch Lab", durationMinutes: 40, checkInStatus: "Pending instructions", prepInstructions: "Avoid topical steroids on the back for 5 days before testing.", linkedDiagnoses: ["Allergic Contact Dermatitis"])
+            case "APT-009":
+                applyAppointmentMetadata(appointment, encounterType: "Procedure follow-up", clinicianName: "Dr. Elizabeth Smith, MD", location: "Derm Procedure Clinic", durationMinutes: 20, checkInStatus: "Confirmed", prepInstructions: "Do not apply wart medication the night before visit.", linkedDiagnoses: ["Verruca Vulgaris", "Rosacea"])
+            case "APT-010":
+                applyAppointmentMetadata(appointment, encounterType: "Urgent lesion evaluation", clinicianName: "Dr. Elizabeth Smith, MD", location: "Rapid Access Derm Clinic", durationMinutes: 15, checkInStatus: "Waiting triage", prepInstructions: "Keep lesion uncovered if possible for photography and measurement.", linkedDiagnoses: ["New rapidly growing lesion"])
+            case "APT-011":
+                applyAppointmentMetadata(appointment, encounterType: "Biologic injection", clinicianName: "Dr. Elizabeth Smith, MD", location: "Derm Infusion and Biologic Clinic", durationMinutes: 15, checkInStatus: "Completed", prepInstructions: "Bring injection log.", linkedDiagnoses: ["Plaque Psoriasis"])
+            case "APT-012":
+                applyAppointmentMetadata(appointment, encounterType: "Annual skin exam", clinicianName: "Dr. Natalie Jones, MD", location: "Derm Preventive Clinic", durationMinutes: 30, checkInStatus: "Completed", prepInstructions: "Remove nail polish for nail exam.", linkedDiagnoses: ["Skin cancer screening"])
+            case "APT-013":
+                applyAppointmentMetadata(appointment, encounterType: "New patient consult", clinicianName: "Dr. Elizabeth Smith, MD", location: "Mohs Surgery Suite", durationMinutes: 45, checkInStatus: "Roomed", prepInstructions: "Bring outside pathology reports.", linkedDiagnoses: ["Basal Cell Carcinoma"])
+            case "APT-014":
+                applyAppointmentMetadata(appointment, encounterType: "Procedure", clinicianName: "Dr. Elizabeth Smith, MD", location: "Derm Procedure Clinic", durationMinutes: 20, checkInStatus: "Checked In", prepInstructions: "No blood thinners for 72 hours prior.", linkedDiagnoses: ["Actinic Keratoses"])
+            case "APT-015":
+                applyAppointmentMetadata(appointment, encounterType: "Biopsy follow-up", clinicianName: "Dr. Natalie Jones, MD", location: "Derm Suite 3", durationMinutes: 15, checkInStatus: "Confirmed", prepInstructions: "Bring dressing supplies for wound care demo.", linkedDiagnoses: ["Atypical nevus"])
+            case "APT-016":
+                applyAppointmentMetadata(appointment, encounterType: "New patient consult", clinicianName: "Dr. Elizabeth Smith, MD", location: "Pigmented Lesion Clinic", durationMinutes: 30, checkInStatus: "Confirmed", prepInstructions: "Complete new patient forms online before arrival.", linkedDiagnoses: ["Suspicious melanocytic lesion"])
+            case "APT-017":
+                applyAppointmentMetadata(appointment, encounterType: "Follow-up", clinicianName: "Dr. Natalie Jones, MD", location: "Derm Suite 2", durationMinutes: 20, checkInStatus: "Scheduled", prepInstructions: "Photograph any new depigmented patches.", linkedDiagnoses: ["Vitiligo"])
+            case "APT-018":
+                applyAppointmentMetadata(appointment, encounterType: "Annual skin exam", clinicianName: "Dr. Elizabeth Smith, MD", location: "Derm Preventive Clinic", durationMinutes: 30, checkInStatus: "Scheduled", prepInstructions: "Arrive without heavy makeup or nail polish.", linkedDiagnoses: ["Skin cancer screening"])
+            case "APT-019":
+                applyAppointmentMetadata(appointment, encounterType: "Urgent visit", clinicianName: "Dr. Natalie Jones, MD", location: "Rapid Access Derm Clinic", durationMinutes: 20, checkInStatus: "Scheduled", prepInstructions: "Avoid applying topical steroids morning of visit.", linkedDiagnoses: ["Atopic Dermatitis flare"])
+            case "APT-020":
+                applyAppointmentMetadata(appointment, encounterType: "Cosmetic consult", clinicianName: "Dr. Elizabeth Smith, MD", location: "Aesthetic Suite", durationMinutes: 20, checkInStatus: "Scheduled", prepInstructions: "No Advil or fish oil for 1 week prior.", linkedDiagnoses: ["Cosmetic — Botox"])
+            case "APT-021":
+                applyAppointmentMetadata(appointment, encounterType: "Post-op wound check", clinicianName: "Dr. Elizabeth Smith, MD", location: "Derm Procedure Clinic", durationMinutes: 15, checkInStatus: "Scheduled", prepInstructions: "Leave dressing in place; will be removed in office.", linkedDiagnoses: ["Excision site follow-up"])
+            default:
+                break
+            }
+        }
+    }
+
+    private func applyPatientMetadata(
+        _ patient: PatientProfile,
+        primaryClinician: String,
+        preferredPharmacy: String,
+        allergies: [String],
+        riskFlags: [String],
+        carePlanSummary: String,
+        emergencyContactName: String,
+        emergencyContactPhone: String,
+        bloodType: String
+    ) {
+        patient.primaryClinician = primaryClinician
+        patient.preferredPharmacy = preferredPharmacy
+        patient.allergies = allergies
+        patient.riskFlags = riskFlags
+        patient.carePlanSummary = carePlanSummary
+        patient.emergencyContactName = emergencyContactName
+        patient.emergencyContactPhone = emergencyContactPhone
+        patient.bloodType = bloodType
+    }
+
+    private func applyMedicationMetadata(
+        _ medication: LocalMedication,
+        genericName: String,
+        dose: String?,
+        route: String,
+        frequency: String,
+        indication: String,
+        status: String,
+        lastFilledDaysAgo: Int,
+        nextRefillInDays: Int?,
+        pharmacyName: String,
+        safetyNotes: [String]
+    ) {
+        medication.genericName = genericName
+        medication.dose = dose
+        medication.route = route
+        medication.frequency = frequency
+        medication.indication = indication
+        medication.status = status
+        medication.startDate = medication.writtenDate
+        medication.lastFilledDate = Calendar.current.date(byAdding: .day, value: -lastFilledDaysAgo, to: .now)
+        medication.nextRefillEligibleDate = nextRefillInDays.map { Calendar.current.date(byAdding: .day, value: $0, to: .now) ?? .now }
+        medication.pharmacyName = pharmacyName
+        medication.safetyNotes = safetyNotes
+    }
+
+    private func applyRecordMetadata(
+        _ record: LocalClinicalRecord,
+        visitType: String,
+        severity: String,
+        patientInstructions: String,
+        followUpPlan: String,
+        recommendedOrders: [String],
+        carePlanSummary: String
+    ) {
+        record.visitType = visitType
+        record.severity = severity
+        record.patientInstructions = patientInstructions
+        record.followUpPlan = followUpPlan
+        record.recommendedOrders = recommendedOrders
+        record.carePlanSummary = carePlanSummary
+    }
+
+    private func applyAppointmentMetadata(
+        _ appointment: Appointment,
+        encounterType: String,
+        clinicianName: String,
+        location: String,
+        durationMinutes: Int,
+        checkInStatus: String,
+        prepInstructions: String,
+        linkedDiagnoses: [String]
+    ) {
+        appointment.encounterType = encounterType
+        appointment.clinicianName = clinicianName
+        appointment.location = location
+        appointment.durationMinutes = durationMinutes
+        appointment.checkInStatus = checkInStatus
+        appointment.prepInstructions = prepInstructions
+        appointment.linkedDiagnoses = linkedDiagnoses
     }
     // swiftlint:enable function_body_length
 }

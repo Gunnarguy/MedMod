@@ -2,15 +2,15 @@ import SwiftUI
 
 struct iPadClinicalToolbar: View {
     @Namespace private var unionNamespace
-    @State private var activeSection = "Home"
+    @Binding var activeSection: String
+    var onAction: (String) -> Void
 
     let tools = [
-        ("Tasks", "checklist"),
-        ("Docs", "doc.text"),
+        ("Chart", "doc.text"),
         ("Rx", "pills"),
-        ("Compliance", "checkmark.shield"),
-        ("Home", "house"),
-        ("Mail", "envelope"),
+        ("Encounter", "waveform.path.ecg.rectangle"),
+        ("AI", "brain.head.profile"),
+        ("Notes", "square.and.pencil"),
         ("Settings", "gearshape")
     ]
 
@@ -36,7 +36,7 @@ struct iPadClinicalToolbar: View {
                 .padding(4)
                 .background(.ultraThinMaterial)
                 .cornerRadius(14)
-                .shadow(color: .black.opacity(0.1), radius: 5)
+                .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
             }
         }
     }
@@ -44,7 +44,8 @@ struct iPadClinicalToolbar: View {
     @ViewBuilder
     private func toolbarButton(for tool: (String, String)) -> some View {
         Button(action: {
-            withAnimation { activeSection = tool.0 }
+            withAnimation(.spring(response: 0.3)) { activeSection = tool.0 }
+            onAction(tool.0)
         }) {
             VStack(spacing: 4) {
                 Image(systemName: tool.1)

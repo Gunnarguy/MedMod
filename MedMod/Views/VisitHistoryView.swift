@@ -19,15 +19,29 @@ struct VisitHistoryView: View {
                         NavigationLink(destination: VisitRecordDetailView(record: record, patient: patient)) {
                             VStack(alignment: .leading, spacing: 4) {
                                 HStack {
-                                    Text(record.conditionName)
-                                        .font(.headline)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(record.conditionName)
+                                            .font(.headline)
+                                        if let visitType = record.visitType {
+                                            Text(visitType)
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                        }
+                                    }
                                     Spacer()
-                                    Text(record.status)
-                                        .font(.caption)
-                                        .padding(4)
-                                        .background(record.status == "Final" ? Color.green.opacity(0.2) : Color.orange.opacity(0.2))
-                                        .foregroundColor(record.status == "Final" ? .green : .orange)
-                                        .cornerRadius(4)
+                                    VStack(alignment: .trailing, spacing: 4) {
+                                        Text(record.status)
+                                            .font(.caption)
+                                            .padding(4)
+                                            .background(record.status == "Final" ? Color.green.opacity(0.2) : Color.orange.opacity(0.2))
+                                            .foregroundColor(record.status == "Final" ? .green : .orange)
+                                            .cornerRadius(4)
+                                        if let severity = record.severity {
+                                            Text(severity)
+                                                .font(.caption2)
+                                                .foregroundColor(.secondary)
+                                        }
+                                    }
                                 }
                                 Text(record.dateRecorded, format: .dateTime.month().day().year())
                                     .font(.subheadline)
@@ -57,16 +71,32 @@ struct VisitHistoryView: View {
                                 Text(appt.reasonForVisit)
                                     .font(.headline)
                                 Spacer()
-                                Text(appt.status)
-                                    .font(.caption)
-                                    .padding(4)
-                                    .background(appt.status == "Scheduled" ? Color.blue.opacity(0.2) : Color.gray.opacity(0.2))
-                                    .foregroundColor(appt.status == "Scheduled" ? .blue : .gray)
-                                    .cornerRadius(4)
+                                VStack(alignment: .trailing, spacing: 4) {
+                                    Text(appt.status)
+                                        .font(.caption)
+                                        .padding(4)
+                                        .background(appt.status == "Scheduled" ? Color.blue.opacity(0.2) : Color.gray.opacity(0.2))
+                                        .foregroundColor(appt.status == "Scheduled" ? .blue : .gray)
+                                        .cornerRadius(4)
+                                    Text(appt.checkInStatus ?? "")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
                             }
                             Text(appt.scheduledTime, format: .dateTime.month().day().year().hour().minute())
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
+                            Text("\(appt.encounterType ?? "Follow-up") | \(appt.clinicianName ?? "")")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            Text(appt.location ?? "")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            if let linkedDiagnoses = appt.linkedDiagnoses, !linkedDiagnoses.isEmpty {
+                                Text("Linked: \(linkedDiagnoses.joined(separator: ", "))")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
                         }
                         .padding(.vertical, 4)
                     }
@@ -120,8 +150,24 @@ struct VisitRecordDetailView: View {
                         noteSection(title: "Impression & Plan", content: plan)
                     }
 
+                    if let instructions = record.patientInstructions, !instructions.isEmpty {
+                        noteSection(title: "Patient Instructions", content: instructions)
+                    }
+
+                    if let followUpPlan = record.followUpPlan, !followUpPlan.isEmpty {
+                        noteSection(title: "Follow-Up", content: followUpPlan)
+                    }
+
+                    if let recommendedOrders = record.recommendedOrders, !recommendedOrders.isEmpty {
+                        noteSection(title: "Orders / Referrals", content: recommendedOrders.joined(separator: "\n- ").withLeadingDash)
+                    }
+
+                    if let carePlanSummary = record.carePlanSummary, !carePlanSummary.isEmpty {
+                        noteSection(title: "Care Plan Summary", content: carePlanSummary)
+                    }
+
                     if let zones = record.affectedAnatomicalZones, !zones.isEmpty {
-                        noteSection(title: "Affected Anatomical Zones", content: zones.joined(separator: ", "))
+                        noteSection(title: "Affected Anatomical Zones", content: zones.map { AnatomicalRegion.displayName(for: $0) }.joined(separator: ", "))
                     }
                 }
 
@@ -155,5 +201,11 @@ struct VisitRecordDetailView: View {
             Text(content)
                 .font(.body)
         }
+    }
+}
+
+private extension String {
+    var withLeadingDash: String {
+        isEmpty ? self : "- \(self)"
     }
 }

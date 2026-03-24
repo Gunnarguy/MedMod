@@ -50,16 +50,18 @@ class HealthKitFHIRService: ObservableObject {
 
         await withCheckedContinuation { continuation in
             let query = HKSampleQuery(sampleType: type, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: nil) { [weak self] _, samples, _ in
-                guard let self else {
-                    continuation.resume()
-                    return
-                }
-
                 let records = (samples as? [HKClinicalRecord]) ?? []
-                for record in records {
-                    self.processFHIRCondition(record: record)
+                Task { @MainActor [weak self] in
+                    guard let self else {
+                        continuation.resume()
+                        return
+                    }
+
+                    for record in records {
+                        self.processFHIRCondition(record: record)
+                    }
+                    continuation.resume()
                 }
-                continuation.resume()
             }
 
             healthStore.execute(query)
@@ -71,16 +73,18 @@ class HealthKitFHIRService: ObservableObject {
 
         await withCheckedContinuation { continuation in
             let query = HKSampleQuery(sampleType: type, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: nil) { [weak self] _, samples, _ in
-                guard let self else {
-                    continuation.resume()
-                    return
-                }
-
                 let records = (samples as? [HKClinicalRecord]) ?? []
-                for record in records {
-                    self.processFHIRMedication(record: record)
+                Task { @MainActor [weak self] in
+                    guard let self else {
+                        continuation.resume()
+                        return
+                    }
+
+                    for record in records {
+                        self.processFHIRMedication(record: record)
+                    }
+                    continuation.resume()
                 }
-                continuation.resume()
             }
 
             healthStore.execute(query)
@@ -95,6 +99,8 @@ class HealthKitFHIRService: ObservableObject {
             existingRecord.conditionName = extractConditionName(from: fhirResource.data)
             existingRecord.status = "Final"
             existingRecord.isHiddenFromPortal = false
+            existingRecord.visitType = "FHIR import"
+            existingRecord.carePlanSummary = "Imported from HealthKit clinical records."
             attachToPatientIfNeeded(record: existingRecord)
             try? modelContext.save()
             return
@@ -105,7 +111,9 @@ class HealthKitFHIRService: ObservableObject {
             dateRecorded: record.startDate,
             conditionName: extractConditionName(from: fhirResource.data),
             status: "Final",
-            isHiddenFromPortal: false
+            isHiddenFromPortal: false,
+            visitType: "FHIR import",
+            carePlanSummary: "Imported from HealthKit clinical records."
         )
 
         modelContext.insert(localRecord)
@@ -122,6 +130,13 @@ class HealthKitFHIRService: ObservableObject {
             existingMedication.writtenDate = record.startDate
             existingMedication.quantityInfo = "Imported from FHIR MedicationRequest"
             existingMedication.refills = 0
+            existingMedication.route = "Imported"
+            existingMedication.frequency = "See FHIR record"
+            existingMedication.status = "Imported"
+            existingMedication.startDate = record.startDate
+            existingMedication.lastFilledDate = record.startDate
+            existingMedication.pharmacyName = "HealthKit import"
+            existingMedication.safetyNotes = ["Review original FHIR MedicationRequest for complete SIG."]
             attachToPatientIfNeeded(medication: existingMedication)
             try? modelContext.save()
             return
@@ -133,7 +148,14 @@ class HealthKitFHIRService: ObservableObject {
             writtenBy: "Clinical Record Import",
             writtenDate: record.startDate,
             quantityInfo: "Imported from FHIR MedicationRequest",
-            refills: 0
+            refills: 0,
+            route: "Imported",
+            frequency: "See FHIR record",
+            status: "Imported",
+            startDate: record.startDate,
+            lastFilledDate: record.startDate,
+            pharmacyName: "HealthKit import",
+            safetyNotes: ["Review original FHIR MedicationRequest for complete SIG."]
         )
 
         modelContext.insert(medication)
@@ -152,6 +174,8 @@ class HealthKitFHIRService: ObservableObject {
         )
         localRecord.dateRecorded = Date()
         localRecord.conditionName = "Basal Cell Carcinoma"
+        localRecord.visitType = "Offline demo import"
+        localRecord.carePlanSummary = "Fallback simulated import used because HealthKit clinical records are unavailable."
 
         let rxRecord = existingMedication(withID: "SIMULATED-CYCLO") ?? LocalMedication(
             rxID: "SIMULATED-CYCLO",
@@ -159,12 +183,28 @@ class HealthKitFHIRService: ObservableObject {
             writtenBy: "Dr. Smith",
             writtenDate: Date(),
             quantityInfo: "1 Bottle",
-            refills: 3
+            refills: 3,
+            route: "Ophthalmic",
+            frequency: "Twice daily",
+            indication: "Dry eye / ocular inflammation",
+            status: "Active",
+            startDate: Date(),
+            lastFilledDate: Date(),
+            pharmacyName: "HealthKit fallback import",
+            safetyNotes: ["Confirm ophthalmology follow-up if symptoms persist."]
         )
         rxRecord.medicationName = "Cyclosporine 0.09% eye drops"
         rxRecord.writtenDate = Date()
         rxRecord.quantityInfo = "1 Bottle"
         rxRecord.refills = 3
+        rxRecord.route = "Ophthalmic"
+        rxRecord.frequency = "Twice daily"
+        rxRecord.indication = "Dry eye / ocular inflammation"
+        rxRecord.status = "Active"
+        rxRecord.startDate = Date()
+        rxRecord.lastFilledDate = Date()
+        rxRecord.pharmacyName = "HealthKit fallback import"
+        rxRecord.safetyNotes = ["Confirm ophthalmology follow-up if symptoms persist."]
 
         if existingClinicalRecord(withID: "SIMULATED-BCC") == nil {
             modelContext.insert(localRecord)

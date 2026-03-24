@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import os
 
 struct EHRMainShellView: View {
     @State private var activeTab: TabSelection = .patient
@@ -9,7 +10,7 @@ struct EHRMainShellView: View {
     #endif
 
     enum TabSelection {
-        case agenda, patient, inbox
+        case agenda, patient, intelligence, inbox
     }
 
     var body: some View {
@@ -19,6 +20,7 @@ struct EHRMainShellView: View {
                     Label("Agenda", systemImage: "calendar")
                 }
                 .tag(TabSelection.agenda)
+                .onAppear { AppLogger.nav.info("📅 Agenda tab appeared") }
 
             // On iPad, show the split-view dashboard; on iPhone, show the simpler list
             Group {
@@ -36,12 +38,21 @@ struct EHRMainShellView: View {
                 Label("Patient", systemImage: "person.crop.circle")
             }
             .tag(TabSelection.patient)
+            .onAppear { AppLogger.nav.info("🧑‍⚕️ Patient tab appeared") }
+
+            ClinicIntelligenceView()
+                .tabItem {
+                    Label("Intelligence", systemImage: "brain.head.profile")
+                }
+                .tag(TabSelection.intelligence)
+                .onAppear { AppLogger.nav.info("🧠 Intelligence tab appeared") }
 
             InboxView()
                 .tabItem {
                     Label("IntraMail", systemImage: "envelope")
                 }
                 .tag(TabSelection.inbox)
+                .onAppear { AppLogger.nav.info("📬 Inbox tab appeared") }
         }
         #if os(iOS)
         .tabBarMinimizeBehavior(.onScrollDown)

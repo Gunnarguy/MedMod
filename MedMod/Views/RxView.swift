@@ -52,20 +52,28 @@ struct RxRowView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(rx.medicationName)
                         .font(.headline)
-                    Text(rx.quantityInfo)
+                    Text(rx.genericName ?? rx.quantityInfo)
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text("\(rx.refills) Refills")
+                    Text(rx.status ?? "Active")
                         .font(.caption.bold())
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
-                        .background(rx.refills > 0 ? Color.green.opacity(0.15) : Color.red.opacity(0.15))
-                        .foregroundColor(rx.refills > 0 ? .green : .red)
+                        .background(rx.status == "Active" ? Color.green.opacity(0.15) : Color.gray.opacity(0.15))
+                        .foregroundColor(rx.status == "Active" ? .green : .gray)
                         .cornerRadius(6)
                 }
+            }
+            Text([rx.dose, rx.route, rx.frequency].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " | "))
+                .font(.caption)
+                .foregroundColor(.secondary)
+            if let indication = rx.indication {
+                Text("Indication: \(indication)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
             HStack {
                 Text("Prescribed: \(rx.writtenDate, format: .dateTime.month().day().year())")
@@ -74,9 +82,33 @@ struct RxRowView: View {
             }
             .font(.caption2)
             .foregroundColor(.secondary)
+            if let lastFilledDate = rx.lastFilledDate {
+                HStack {
+                    Text("Last Filled: \(lastFilledDate, format: .dateTime.month().day().year())")
+                    Spacer()
+                    Text("Refills: \(rx.refills)")
+                }
+                .font(.caption2)
+                .foregroundColor(.secondary)
+            }
+            if let nextRefillEligibleDate = rx.nextRefillEligibleDate {
+                Text("Next Refill Eligible: \(nextRefillEligibleDate, format: .dateTime.month().day().year())")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+            if let pharmacyName = rx.pharmacyName {
+                Text("Pharmacy: \(pharmacyName)")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+            if let safetyNotes = rx.safetyNotes, !safetyNotes.isEmpty {
+                Text("Safety: \(safetyNotes.joined(separator: "; "))")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
         }
         .padding(.vertical, 4)
     }
 }
 
-// (RxView removed — use patient-scoped RxListView instead)
+// (RxView removed - use patient-scoped RxListView instead)
