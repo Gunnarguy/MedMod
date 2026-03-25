@@ -179,7 +179,7 @@ struct ContentView: View {
             conditionName: "Melanoma In Situ — Post-Excision", status: "Final", isHiddenFromPortal: false,
             ccHPI: "Follow-up for melanoma in situ excision. Pathology confirmed melanoma in situ, lentigo maligna type. Margins clear on excisional biopsy. Patient here for wide local excision.",
             examFindings: "Left scapular biopsy site: well-healing, no signs of infection. Wide local excision performed with 5mm surgical margins. Specimen sent to pathology. No new suspicious lesions on limited exam.",
-            impressionsAndPlan: "Wide local excision of melanoma in situ — completed. Await final pathology for margin confirmation. Established q6-month full body skin exams for 2 years, then annual. Patient counseled on sun protection, monthly self-exams, and warning signs of recurrence.",
+            impressionsAndPlan: "Wide local excision of melanoma in situ — completed. Await final pathology for margin confirmation. Established q6mo full-body skin exams for 2 years, then annual. Patient counseled on sun protection, monthly self-exams, and warning signs of recurrence.",
             affectedAnatomicalZones: ["left_upper_extremity"],
             providerSignature: "Dr. Smith, MD")
 
@@ -378,6 +378,21 @@ struct ContentView: View {
 
         configureDemoData(patients: allPatients, medications: allMeds, records: allRecords, appointments: allAppts)
 
+        // ICD-10 codes for clinical records
+        janeRec1.icd10Code = "C44.11"   // BCC of skin of eyelid/canthus (upper extremity variant)
+        janeRec2.icd10Code = "L57.0"    // Actinic keratosis
+        janeRec3.icd10Code = "Z12.83"   // Encounter for screening for malignant neoplasm of skin
+        mariaRec1.icd10Code = "L70.0"   // Acne vulgaris
+        mariaRec2.icd10Code = "L71.9"   // Rosacea, unspecified
+        robertRec1.icd10Code = "D03.59"  // Melanoma in situ of other part of trunk
+        robertRec2.icd10Code = "D03.59"  // Melanoma in situ — post-excision
+        robertRec3.icd10Code = "L40.0"   // Psoriasis vulgaris
+        sarahRec1.icd10Code = "L20.89"   // Other atopic dermatitis
+        sarahRec2.icd10Code = "L23.0"    // ACD due to metals (nickel)
+        davidRec1.icd10Code = "L71.1"    // Rhinophyma / papulopustular rosacea
+        davidRec2.icd10Code = "B07.9"    // Viral wart, unspecified
+        davidRec3.icd10Code = "D22.5"    // Melanocytic nevi of trunk
+
         for p in allPatients { modelContext.insert(p) }
         for m in allMeds { modelContext.insert(m) }
         for r in allRecords { modelContext.insert(r) }
@@ -489,7 +504,7 @@ struct ContentView: View {
                     preferredPharmacy: "Northside Specialty Pharmacy",
                     allergies: ["Penicillin"],
                     riskFlags: ["Melanoma history", "Possible psoriatic arthritis", "Immunomodulator monitoring required"],
-                    carePlanSummary: "Maintain q6-month melanoma surveillance while monitoring methotrexate safety labs and joint symptoms.",
+                    carePlanSummary: "Maintain q6mo melanoma surveillance while monitoring methotrexate safety labs and joint symptoms.",
                     emergencyContactName: "Angela Chen",
                     emergencyContactPhone: "(555) 010-1003",
                     bloodType: "B+"
@@ -585,7 +600,7 @@ struct ContentView: View {
             case "REC-006":
                 applyRecordMetadata(record, visitType: "Pigmented lesion workup", severity: "Urgent oncology workup", patientInstructions: "Keep biopsy site clean, avoid soaking, and await expedited pathology communication.", followUpPlan: "One-week pathology review with likely wide local excision planning.", recommendedOrders: ["Rush pathology"], carePlanSummary: "High-risk pigmented lesion moved to expedited melanoma workflow.")
             case "REC-007":
-                applyRecordMetadata(record, visitType: "Post-biopsy oncology follow-up", severity: "Cancer surveillance", patientInstructions: "Maintain sun avoidance, perform monthly self-exams, and continue scheduled surveillance.", followUpPlan: "q6-month full-body skin exams for 2 years.", recommendedOrders: ["Final pathology margin confirmation"], carePlanSummary: "Definitive melanoma in situ excision completed with ongoing surveillance.")
+                applyRecordMetadata(record, visitType: "Post-biopsy oncology follow-up", severity: "Cancer surveillance", patientInstructions: "Maintain sun avoidance, perform monthly self-exams, and continue scheduled surveillance.", followUpPlan: "q6mo full-body skin exams for 2 years.", recommendedOrders: ["Final pathology margin confirmation"], carePlanSummary: "Definitive melanoma in situ excision completed with ongoing surveillance.")
             case "REC-008":
                 applyRecordMetadata(record, visitType: "Chronic disease flare visit", severity: "Moderate-to-severe", patientInstructions: "Complete baseline labs before first methotrexate dose and report fever, cough, or oral ulcers immediately.", followUpPlan: "6-week methotrexate safety and response visit.", recommendedOrders: ["CBC", "CMP", "Hepatitis panel", "Rheumatology referral"], carePlanSummary: "Escalated psoriasis treatment with systemic therapy due to joint symptoms.")
             case "REC-009":

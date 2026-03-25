@@ -19,7 +19,8 @@ struct MedModApp: App {
             PatientProfile.self,
             LocalClinicalRecord.self,
             LocalMedication.self,
-            Appointment.self
+            Appointment.self,
+            ClinicalPhoto.self
         ])
         let config = ModelConfiguration(schema: schema)
 
@@ -51,6 +52,9 @@ struct MedModApp: App {
                     AppLogger.app.info("🔄 Triggering RAG reindex on launch")
                     await ClinicalRAGService.shared.indexAllData(modelContext: container.mainContext)
                 }
+                // HealthKit FHIR sync removed — this is an HCP app.
+                // HealthKit only surfaces the *device owner's* records, not the patient's.
+                // Patient data comes from EHR integrations / FHIR server, not the clinician's Apple Health.
         }
         .modelContainer(container)
     }
