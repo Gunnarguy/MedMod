@@ -3,19 +3,42 @@ import SwiftData
 
 struct VisitHistoryView: View {
     let patient: PatientProfile
+    @State private var searchText = ""
 
     private var records: [LocalClinicalRecord] {
         (patient.clinicalRecords ?? []).sorted { $0.dateRecorded > $1.dateRecorded }
     }
 
+    private var filteredRecords: [LocalClinicalRecord] {
+        guard !searchText.isEmpty else { return records }
+        let query = searchText.lowercased()
+        return records.filter {
+            $0.conditionName.lowercased().contains(query)
+            || ($0.ccHPI?.lowercased().contains(query) ?? false)
+            || ($0.icd10Code?.lowercased().contains(query) ?? false)
+            || ($0.visitType?.lowercased().contains(query) ?? false)
+        }
+    }
+
+    private var filteredAppointments: [Appointment] {
+        let appts = (patient.appointments ?? []).sorted { $0.scheduledTime > $1.scheduledTime }
+        guard !searchText.isEmpty else { return appts }
+        let query = searchText.lowercased()
+        return appts.filter {
+            $0.reasonForVisit.lowercased().contains(query)
+            || $0.status.lowercased().contains(query)
+            || ($0.clinicianName?.lowercased().contains(query) ?? false)
+        }
+    }
+
     var body: some View {
         List {
             Section(header: Text("Clinical History")) {
-                if records.isEmpty {
-                    Text("No past clinical records found.")
+                if filteredRecords.isEmpty {
+                    Text(searchText.isEmpty ? "No past clinical records found." : "No records matching \"\(searchText)\"")
                         .foregroundColor(.secondary)
                 } else {
-                    ForEach(records) { record in
+                    ForEach(filteredRecords) { record in
                         NavigationLink(destination: VisitRecordDetailView(record: record, patient: patient)) {
                             VStack(alignment: .leading, spacing: 4) {
                                 HStack {
@@ -60,9 +83,9 @@ struct VisitHistoryView: View {
             }
 
             Section(header: Text("Appointments")) {
-                let appointments = (patient.appointments ?? []).sorted { $0.scheduledTime > $1.scheduledTime }
+                let appointments = filteredAppointments
                 if appointments.isEmpty {
-                    Text("No appointments scheduled.")
+                    Text(searchText.isEmpty ? "No appointments scheduled." : "No appointments matching \"\(searchText)\"")
                         .foregroundColor(.secondary)
                 } else {
                     ForEach(appointments) { appt in
@@ -104,6 +127,7 @@ struct VisitHistoryView: View {
             }
         }
         .navigationTitle("Visits & Records")
+        .searchable(text: $searchText, prompt: "Search diagnoses, visits, ICD-10…")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         .listStyle(.insetGrouped)
@@ -115,6 +139,8 @@ struct VisitHistoryView: View {
 struct VisitRecordDetailView: View {
     let record: LocalClinicalRecord
     let patient: PatientProfile
+    @State private var pdfURL: URL?
+    @State private var showShareSheet = false
 
     var body: some View {
         ScrollView {
@@ -146,6 +172,20 @@ struct VisitRecordDetailView: View {
 
                     noteSection(title: "Diagnosis / Condition", content: record.conditionName)
 
+                    if let icd10 = record.icd10Code, !icd10.isEmpty {
+                        HStack(spacing: 6) {
+                            Image(systemName: "tag.fill")
+                                .font(.caption)
+                                .foregroundColor(.blue)
+                            Text("ICD-10: \(icd10)")
+                                .font(.caption.monospaced())
+                                .foregroundColor(.blue)
+                        }
+                        .padding(6)
+                        .background(Color.blue.opacity(0.08))
+                        .cornerRadius(6)
+                    }
+
                     if let plan = record.impressionsAndPlan, !plan.isEmpty {
                         noteSection(title: "Impression & Plan", content: plan)
                     }
@@ -171,6 +211,37 @@ struct VisitRecordDetailView: View {
                     }
                 }
 
+                // Patient Education
+                let educationLinks = PatientEducation.links(for: record.conditionName, icd10: record.icd10Code)
+                if !educationLinks.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("Patient Education", systemImage: "book.fill")
+                            .font(.subheadline.bold())
+                            .foregroundColor(.teal)
+                        ForEach(educationLinks, id: \.title) { link in
+                            HStack(spacing: 8) {
+                                Image(systemName: link.icon)
+                                    .foregroundColor(.teal)
+                                    .frame(width: 20)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(link.title)
+                                        .font(.caption.bold())
+                                    Text(link.description)
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding(8)
+                            .background(Color.teal.opacity(0.06))
+                            .cornerRadius(8)
+                        }
+                    }
+                }
+
                 Divider()
 
                 HStack {
@@ -191,6 +262,36 @@ struct VisitRecordDetailView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                if let url = pdfURL {
+                    ShareLink(item: url) {
+                        Label("Share PDF", systemImage: "square.and.arrow.up")
+                    }
+                } else {
+                    Button {
+                        pdfURL = generatePDFLocally(
+                            patient: patient,
+                            record: record,
+                            details: ClinicalVisitNote(
+                                primaryDiagnosis: record.conditionName,
+                                ccHPI: record.ccHPI ?? record.conditionName,
+                                reviewOfSystems: record.reviewOfSystems ?? "",
+                                examFindings: record.examFindings ?? "",
+                                impressionsAndPlan: record.impressionsAndPlan ?? record.conditionName,
+                                patientInstructions: record.patientInstructions ?? "",
+                                followUpPlan: record.followUpPlan ?? "",
+                                recommendedOrders: record.recommendedOrders ?? [],
+                                medicationChanges: [],
+                                affectedAnatomicalZones: record.affectedAnatomicalZones ?? []
+                            )
+                        )
+                    } label: {
+                        Label("Export PDF", systemImage: "doc.richtext")
+                    }
+                }
+            }
+        }
     }
 
     private func noteSection(title: String, content: String) -> some View {

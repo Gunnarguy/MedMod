@@ -54,6 +54,61 @@ struct PatientDashboardView: View {
 
     // MARK: - Patient Content
 
+    private func clinicalAlerts(for patient: PatientProfile) -> [ClinicalAlert] {
+        var alerts: [ClinicalAlert] = []
+        let meds = patient.medications ?? []
+        let medNames = meds.map { $0.medicationName.lowercased() }
+
+        if medNames.contains(where: { $0.contains("methotrexate") }) {
+            alerts.append(ClinicalAlert(
+                icon: "pills.circle.fill", color: .red, title: "Methotrexate Monitoring",
+                message: "Patient on methotrexate — verify CBC and LFTs within last 30 days."
+            ))
+        }
+        if medNames.contains(where: { $0.contains("dupixent") || $0.contains("dupilumab") }) {
+            alerts.append(ClinicalAlert(
+                icon: "syringe.fill", color: .orange, title: "Biologic Therapy",
+                message: "Dupixent patient — assess for conjunctivitis and injection site reactions."
+            ))
+        }
+        if medNames.contains(where: { $0.contains("humira") || $0.contains("adalimumab") }) {
+            alerts.append(ClinicalAlert(
+                icon: "syringe.fill", color: .orange, title: "TNF Inhibitor",
+                message: "Humira patient — screen for TB and monitor for infection signs."
+            ))
+        }
+        if patient.isSmoker && (patient.clinicalRecords ?? []).contains(where: {
+            $0.conditionName.lowercased().contains("melanoma") || $0.conditionName.lowercased().contains("carcinoma")
+        }) {
+            alerts.append(ClinicalAlert(
+                icon: "exclamationmark.triangle.fill", color: .red, title: "High-Risk Patient",
+                message: "Current smoker with skin cancer history — prioritize full-body skin exam."
+            ))
+        } else if patient.isSmoker {
+            alerts.append(ClinicalAlert(
+                icon: "smoke.fill", color: .orange, title: "Smoking Status",
+                message: "Current smoker — consider cessation counseling and wound healing implications."
+            ))
+        }
+        let highRiskAllergies = patient.allergies.filter { a in
+            let lower = a.lowercased()
+            return lower.contains("penicillin") || lower.contains("sulfa") || lower.contains("latex") || lower.contains("nsaid")
+        }
+        if !highRiskAllergies.isEmpty {
+            alerts.append(ClinicalAlert(
+                icon: "allergens.fill", color: .yellow, title: "Allergy Alert",
+                message: "Documented allergies: \(highRiskAllergies.joined(separator: ", "))"
+            ))
+        }
+        if !patient.riskFlags.isEmpty {
+            alerts.append(ClinicalAlert(
+                icon: "flag.fill", color: .purple, title: "Risk Flags",
+                message: patient.riskFlags.joined(separator: " • ")
+            ))
+        }
+        return alerts
+    }
+
     @ViewBuilder
     private func patientContent(_ patient: PatientProfile) -> some View {
         ScrollView {
@@ -61,7 +116,13 @@ struct PatientDashboardView: View {
                 // Header card
                 patientHeader(patient)
 
-                // Alerts: allergies + risk flags
+                // CDS Alerts (smart clinical decision support)
+                let cdsAlerts = clinicalAlerts(for: patient)
+                if !cdsAlerts.isEmpty {
+                    cdsAlertsCard(cdsAlerts)
+                }
+
+                // Basic alerts: allergies + risk flags
                 if !patient.allergies.isEmpty || !patient.riskFlags.isEmpty {
                     alertsCard(patient)
                 }
@@ -133,6 +194,33 @@ struct PatientDashboardView: View {
             Text(value)
                 .font(.subheadline)
         }
+    }
+
+    // MARK: - CDS Alerts
+
+    private func cdsAlertsCard(_ alerts: [ClinicalAlert]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Clinical Decision Support", systemImage: "brain.head.profile")
+                .font(.subheadline.bold())
+                .foregroundColor(.primary)
+            ForEach(alerts, id: \.title) { alert in
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: alert.icon)
+                        .foregroundColor(alert.color)
+                        .frame(width: 22)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(alert.title)
+                            .font(.caption.bold())
+                        Text(alert.message)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(.red.opacity(0.06), in: RoundedRectangle(cornerRadius: 14))
     }
 
     // MARK: - Alerts
@@ -211,6 +299,10 @@ struct PatientDashboardView: View {
             NavigationLink(destination: RxListView(patient: patient)) {
                 chartRow(label: "Medications", icon: "pills", color: .green)
             }
+            Divider().padding(.leading, 44)
+            NavigationLink(destination: ClinicalPhotoView(patient: patient)) {
+                chartRow(label: "Clinical Photos", icon: "camera.fill", color: .orange)
+            }
         }
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
     }
@@ -243,6 +335,14 @@ struct PatientDashboardView: View {
             Divider().padding(.leading, 44)
             NavigationLink(destination: ClinicIntelligenceView(patient: patient)) {
                 chartRow(label: "AI Assistant", icon: "brain.head.profile", color: .blue)
+            }
+            Divider().padding(.leading, 44)
+            NavigationLink(destination: LesionTrackingView(patient: patient)) {
+                chartRow(label: "Lesion Tracking", icon: "chart.line.uptrend.xyaxis", color: .teal)
+            }
+            Divider().padding(.leading, 44)
+            NavigationLink(destination: AnatomicalRealityView(patient: patient)) {
+                chartRow(label: "Body Map", icon: "figure.stand", color: .red)
             }
         }
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))

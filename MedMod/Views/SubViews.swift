@@ -38,7 +38,7 @@ struct AgendaView: View {
     }
 
     private var statsCompleted: Int { todaySchedule.filter { $0.appointment.status == "Completed" }.count }
-    private var statsTotal: Int { todaySchedule.count }
+    private var statsTotal: Int { Set(todaySchedule.map(\.patient.id)).count }
 
     var body: some View {
         NavigationStack {

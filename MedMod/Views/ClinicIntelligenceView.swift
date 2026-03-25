@@ -2,6 +2,26 @@ import SwiftUI
 import SwiftData
 import os
 
+// MARK: - Chat Message
+
+private struct ChatMessage: Identifiable {
+    let id: UUID
+    let isUser: Bool
+    let text: String
+    let metadata: ResponseMetadata?
+    let thinkingSteps: [ThinkingStep]
+
+    init(id: UUID = UUID(), isUser: Bool, text: String, metadata: ResponseMetadata? = nil, thinkingSteps: [ThinkingStep] = []) {
+        self.id = id
+        self.isUser = isUser
+        self.text = text
+        self.metadata = metadata
+        self.thinkingSteps = thinkingSteps
+    }
+}
+
+// MARK: - Clinic Intelligence View
+
 struct ClinicIntelligenceView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \PatientProfile.lastName) private var patients: [PatientProfile]
@@ -9,7 +29,7 @@ struct ClinicIntelligenceView: View {
     @ObservedObject private var ragService = ClinicalRAGService.shared
 
     @State private var queryText = ""
-    @State private var chatHistory: [(isUser: Bool, text: String, metadata: ResponseMetadata?)] = []
+    @State private var chatHistory: [ChatMessage] = []
     @State private var isProcessing = false
     @State private var selectedPatient: PatientProfile?
     @State private var deepThinkEnabled = false
@@ -47,13 +67,18 @@ struct ClinicIntelligenceView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // Context bar: engine status + RAG + patient picker
-                HStack(spacing: 10) {
-                    Image(systemName: "cpu")
-                        .foregroundStyle(.secondary)
-                    Text(intelligenceService.engineStatusLabel)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                // Context bar: engine status + RAG + Deep Think + patient picker
+                HStack(spacing: 8) {
+                    HStack(spacing: 5) {
+                        Circle()
+                            .fill(ragService.indexedChunkCount > 0 ? .green : .orange)
+                            .frame(width: 6, height: 6)
+                        Text(intelligenceService.engineStatusLabel)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+
                     Spacer()
 
                     // Deep Think toggle
@@ -61,13 +86,14 @@ struct ClinicIntelligenceView: View {
                         deepThinkEnabled.toggle()
                         intelligenceService.deepThinkEnabled = deepThinkEnabled
                     } label: {
-                        HStack(spacing: 3) {
+                        HStack(spacing: 4) {
                             Image(systemName: deepThinkEnabled ? "brain.head.profile.fill" : "brain.head.profile")
-                            Text("Deep")
-                                .font(.caption2)
+                                .symbolEffect(.bounce, value: deepThinkEnabled)
+                            Text(deepThinkEnabled ? "Deep Think" : "Standard")
+                                .font(.caption2.bold())
                         }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
                         .background(deepThinkEnabled ? Color.orange.opacity(0.2) : Color(.tertiarySystemBackground), in: Capsule())
                         .foregroundStyle(deepThinkEnabled ? .orange : .secondary)
                     }
@@ -95,7 +121,7 @@ struct ClinicIntelligenceView: View {
                             Image(systemName: "chevron.down")
                                 .font(.caption2)
                         }
-                        .font(.subheadline)
+                        .font(.caption)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 5)
                         .background(.purple.opacity(0.12), in: Capsule())
@@ -129,31 +155,36 @@ struct ClinicIntelligenceView: View {
                 // Chat messages
                 ScrollViewReader { proxy in
                     ScrollView {
-                        LazyVStack(spacing: 12) {
-                            ForEach(Array(chatHistory.enumerated()), id: \.offset) { idx, message in
-                                ChatBubble(message: (isUser: message.isUser, text: message.text), metadata: message.metadata)
-                                    .id(idx)
+                        LazyVStack(spacing: 16) {
+                            ForEach(chatHistory) { message in
+                                if message.isUser {
+                                    UserBubble(text: message.text)
+                                } else {
+                                    AIResponseView(message: message)
+                                }
                             }
                             if isProcessing {
-                                HStack {
-                                    ProgressView()
-                                        .padding(10)
-                                        .background(Color(.secondarySystemBackground))
-                                        .cornerRadius(14)
-                                    Spacer()
-                                }
-                                .padding(.horizontal)
-                                .id("loading")
+                                ThinkingStreamView(
+                                    steps: ragService.thinkingSteps,
+                                    deepThinkEnabled: deepThinkEnabled
+                                )
+                                .id("thinking")
                             }
                         }
                         .padding(.top, 8)
+                        .padding(.bottom, 12)
                     }
                     .onChange(of: chatHistory.count) {
                         withAnimation {
-                            if isProcessing {
-                                proxy.scrollTo("loading", anchor: .bottom)
-                            } else {
-                                proxy.scrollTo(chatHistory.count - 1, anchor: .bottom)
+                            if let last = chatHistory.last {
+                                proxy.scrollTo(last.id, anchor: .bottom)
+                            }
+                        }
+                    }
+                    .onChange(of: ragService.thinkingSteps.count) {
+                        if isProcessing {
+                            withAnimation {
+                                proxy.scrollTo("thinking", anchor: .bottom)
                             }
                         }
                     }
@@ -226,12 +257,12 @@ struct ClinicIntelligenceView: View {
         if let p = selectedPatient {
             let medCount = p.medications?.count ?? 0
             let recordCount = p.clinicalRecords?.count ?? 0
-            chatHistory.append((isUser: false, text: "Focused on \(p.fullName)'s chart — \(recordCount) records, \(medCount) medications. Ask me anything about their history, meds, appointments, risks, or care plan.", metadata: nil))
+            chatHistory.append(ChatMessage(isUser: false, text: "Focused on \(p.fullName)'s chart — \(recordCount) records, \(medCount) medications. Ask me anything about their history, meds, appointments, risks, or care plan."))
         } else {
             let recordCount = patients.reduce(0) { $0 + ($1.clinicalRecords?.count ?? 0) }
             let medCount = patients.reduce(0) { $0 + ($1.medications?.count ?? 0) }
             let ragLabel = ragService.indexedChunkCount > 0 ? " RAG: \(ragService.indexedChunkCount) chunks indexed." : ""
-            chatHistory.append((isUser: false, text: "Panel intelligence ready — \(patients.count) patients, \(recordCount) records, \(medCount) medications.\(ragLabel) Ask about schedules, conditions, medications, risks, or patterns across your panel.", metadata: nil))
+            chatHistory.append(ChatMessage(isUser: false, text: "Panel intelligence ready — \(patients.count) patients, \(recordCount) records, \(medCount) medications.\(ragLabel) Ask about schedules, conditions, medications, risks, or patterns across your panel."))
         }
     }
 
@@ -239,7 +270,7 @@ struct ClinicIntelligenceView: View {
         let q = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { return }
         queryText = ""
-        chatHistory.append((isUser: true, text: q, metadata: nil))
+        chatHistory.append(ChatMessage(isUser: true, text: q))
         isProcessing = true
 
         if let patient = selectedPatient {
@@ -257,58 +288,229 @@ struct ClinicIntelligenceView: View {
                     response = try await intelligenceService.executePanelQuery(query: q, modelContext: modelContext)
                 }
                 AppLogger.intel.info("✅ Response: \(response.count) chars")
-                chatHistory.append((isUser: false, text: response, metadata: intelligenceService.ragMetadata))
+                chatHistory.append(ChatMessage(
+                    isUser: false,
+                    text: response,
+                    metadata: intelligenceService.ragMetadata,
+                    thinkingSteps: ragService.thinkingSteps
+                ))
             } catch {
                 AppLogger.intel.error("❌ Query failed: \(error.localizedDescription)")
-                chatHistory.append((isUser: false, text: "Error: \(error.localizedDescription)", metadata: nil))
+                chatHistory.append(ChatMessage(isUser: false, text: "Error: \(error.localizedDescription)"))
             }
             isProcessing = false
         }
     }
 }
 
-// MARK: - Chat Bubble
+// MARK: - User Bubble
 
-private struct ChatBubble: View {
-    let message: (isUser: Bool, text: String)
-    var metadata: ResponseMetadata?
+private struct UserBubble: View {
+    let text: String
 
     var body: some View {
         HStack {
-            if message.isUser { Spacer(minLength: 60) }
-            VStack(alignment: message.isUser ? .trailing : .leading, spacing: 4) {
-                Text(message.text)
-                    .padding(10)
-                    .background(message.isUser ? Color.purple : Color(.secondarySystemBackground))
-                    .foregroundColor(message.isUser ? .white : .primary)
-                    .cornerRadius(14)
-                    .textSelection(.enabled)
+            Spacer(minLength: 60)
+            Text(text)
+                .padding(10)
+                .background(Color.purple)
+                .foregroundColor(.white)
+                .cornerRadius(14)
+                .textSelection(.enabled)
+        }
+        .padding(.horizontal)
+    }
+}
 
-                // RAG metadata badge
-                if let meta = metadata, !message.isUser {
-                    HStack(spacing: 6) {
-                        if let verif = meta.verification {
-                            Label(verif.confidence.rawValue.capitalized, systemImage: confidenceIcon(verif.confidence))
+// MARK: - Thinking Stream View (live during processing)
+
+private struct ThinkingStreamView: View {
+    let steps: [ThinkingStep]
+    let deepThinkEnabled: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 6) {
+                Image(systemName: deepThinkEnabled ? "brain.head.profile.fill" : "brain")
+                    .foregroundStyle(deepThinkEnabled ? .orange : .purple)
+                    .symbolEffect(.pulse, options: .repeating)
+                Text(deepThinkEnabled ? "Deep Think" : "Thinking")
+                    .font(.subheadline.bold())
+                    .foregroundStyle(deepThinkEnabled ? .orange : .purple)
+                Spacer()
+            }
+            .padding(.bottom, 10)
+
+            ForEach(Array(steps.enumerated()), id: \.element.id) { index, step in
+                HStack(alignment: .top, spacing: 10) {
+                    VStack(spacing: 0) {
+                        Image(systemName: step.phase == .complete ? "checkmark.circle.fill" : step.icon)
+                            .font(.system(size: 10))
+                            .foregroundStyle(stepColor(step))
+                            .frame(width: 12, height: 12)
+                        if index < steps.count - 1 {
+                            Rectangle()
+                                .fill(Color(.separator))
+                                .frame(width: 1)
+                                .frame(minHeight: 16)
+                        }
+                    }
+                    .frame(width: 12)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(step.title)
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundStyle(step.phase == .complete ? .green : .primary)
+                        if !step.detail.isEmpty {
+                            Text(step.detail)
                                 .font(.caption2)
-                                .foregroundStyle(confidenceColor(verif.confidence))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(3)
+                        }
+                    }
+                    .padding(.bottom, 6)
+
+                    Spacer()
+                }
+                .transition(.asymmetric(
+                    insertion: .move(edge: .leading).combined(with: .opacity),
+                    removal: .opacity
+                ))
+            }
+
+            HStack(spacing: 8) {
+                ProgressView()
+                    .scaleEffect(0.7)
+                Text(steps.last?.phase == .complete ? "Generating response…" : "Processing…")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.top, 2)
+            .padding(.leading, 22)
+        }
+        .padding(14)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .padding(.horizontal)
+        .animation(.easeInOut(duration: 0.3), value: steps.count)
+    }
+
+    private func stepColor(_ step: ThinkingStep) -> Color {
+        switch step.phase {
+        case .complete: return .green
+        case .verification: return step.icon == "checkmark.shield.fill" ? .green : .orange
+        case .deepThinkPass, .followUpExtraction: return .orange
+        case .generation: return .purple
+        default: return .blue
+        }
+    }
+}
+
+// MARK: - AI Response View
+
+private struct AIResponseView: View {
+    let message: ChatMessage
+    @State private var showSources = false
+    @State private var showGates = false
+    @State private var showThinking = false
+    @State private var showMetrics = false
+
+    var body: some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(message.text)
+                    .textSelection(.enabled)
+                    .padding(12)
+                    .background(Color(.secondarySystemBackground))
+                    .cornerRadius(14)
+
+                if let meta = message.metadata {
+                    // Compact summary badges
+                    HStack(spacing: 8) {
+                        if let verif = meta.verification {
+                            HStack(spacing: 3) {
+                                Image(systemName: confidenceIcon(verif.confidence))
+                                    .font(.caption2)
+                                Text(verif.confidence.rawValue.capitalized)
+                                    .font(.caption2.bold())
+                            }
+                            .foregroundStyle(confidenceColor(verif.confidence))
                         }
 
-                        Text("\(meta.usedChunkCount) chunks · \(String(format: "%.0f", meta.totalTimeMs))ms")
+                        Text("\(meta.usedChunkCount) sources")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+
+                        Text("·").foregroundStyle(.tertiary)
+
+                        Text(String(format: "%.0fms", meta.totalTimeMs))
                             .font(.caption2)
                             .foregroundStyle(.secondary)
 
                         if meta.deepThinkPassesUsed > 1 {
-                            Label("\(meta.deepThinkPassesUsed) passes", systemImage: "brain.head.profile")
-                                .font(.caption2)
-                                .foregroundStyle(.orange)
+                            HStack(spacing: 2) {
+                                Image(systemName: "brain.head.profile")
+                                    .font(.caption2)
+                                Text("\(meta.deepThinkPassesUsed) passes")
+                                    .font(.caption2)
+                            }
+                            .foregroundStyle(.orange)
+                        }
+                    }
+                    .padding(.horizontal, 8)
+
+                    // Expandable insight drawers
+                    VStack(spacing: 4) {
+                        if !message.thinkingSteps.isEmpty {
+                            expandableSection(title: "Thought Process", icon: "brain", count: message.thinkingSteps.count, isExpanded: $showThinking) {
+                                ThinkingStepsReplayView(steps: message.thinkingSteps)
+                            }
+                        }
+
+                        if !meta.sourceChunks.isEmpty {
+                            expandableSection(title: "Sources", icon: "doc.text", count: meta.sourceChunks.count, isExpanded: $showSources) {
+                                SourcesListView(chunks: meta.sourceChunks)
+                            }
+                        }
+
+                        if let verif = meta.verification {
+                            expandableSection(title: "Verification Gates", icon: "checkmark.shield", count: nil, isExpanded: $showGates) {
+                                GatesGridView(verification: verif)
+                            }
+                        }
+
+                        expandableSection(title: "Pipeline Metrics", icon: "gauge", count: nil, isExpanded: $showMetrics) {
+                            PipelineMetricsView(meta: meta)
                         }
                     }
                     .padding(.horizontal, 4)
                 }
             }
-            if !message.isUser { Spacer(minLength: 60) }
+            Spacer(minLength: 40)
         }
         .padding(.horizontal)
+    }
+
+    @ViewBuilder
+    private func expandableSection<Content: View>(title: String, icon: String, count: Int?, isExpanded: Binding<Bool>, @ViewBuilder content: @escaping () -> Content) -> some View {
+        DisclosureGroup(isExpanded: isExpanded) {
+            content()
+                .padding(.top, 4)
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.caption2)
+                Text(title)
+                    .font(.caption2.bold())
+                if let count {
+                    Text("(\(count))")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .foregroundStyle(.purple)
+        }
+        .font(.caption2)
     }
 
     private func confidenceIcon(_ tier: ConfidenceTier) -> String {
@@ -324,6 +526,223 @@ private struct ChatBubble: View {
         case .high: return .green
         case .medium: return .orange
         case .low: return .red
+        }
+    }
+}
+
+// MARK: - Thinking Steps Replay (per-message)
+
+private struct ThinkingStepsReplayView: View {
+    let steps: [ThinkingStep]
+
+    private var baseTime: Date { steps.first?.timestamp ?? Date() }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(steps) { step in
+                HStack(alignment: .top, spacing: 8) {
+                    Text(String(format: "+%.0fms", step.timestamp.timeIntervalSince(baseTime) * 1000))
+                        .font(.system(.caption2, design: .monospaced))
+                        .foregroundStyle(.tertiary)
+                        .frame(width: 55, alignment: .trailing)
+
+                    Image(systemName: step.icon)
+                        .font(.caption2)
+                        .foregroundStyle(phaseColor(step.phase))
+                        .frame(width: 12)
+
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(step.title)
+                            .font(.caption2)
+                            .fontWeight(.medium)
+                        if !step.detail.isEmpty {
+                            Text(step.detail)
+                                .font(.system(size: 9))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                        }
+                    }
+                    Spacer()
+                }
+            }
+        }
+    }
+
+    private func phaseColor(_ phase: ThinkingPhase) -> Color {
+        switch phase {
+        case .complete: return .green
+        case .verification: return .blue
+        case .deepThinkPass, .followUpExtraction: return .orange
+        case .generation: return .purple
+        default: return .secondary
+        }
+    }
+}
+
+// MARK: - Sources List
+
+private struct SourcesListView: View {
+    let chunks: [ChunkSummary]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(chunks.enumerated()), id: \.element.id) { index, chunk in
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack {
+                        Text("\(index + 1).")
+                            .font(.caption2.bold())
+                            .foregroundStyle(.purple)
+                        Text(chunk.patientName)
+                            .font(.caption2.bold())
+                        Text("— \(chunk.sectionTitle)")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                    }
+
+                    HStack(spacing: 6) {
+                        Text(String(format: "%.4f", chunk.score))
+                            .font(.system(.caption2, design: .monospaced))
+                        if let vr = chunk.vectorRank {
+                            Text("V:#\(vr)")
+                                .font(.system(.caption2, design: .monospaced))
+                                .foregroundStyle(.blue)
+                        }
+                        if let kr = chunk.keywordRank {
+                            Text("K:#\(kr)")
+                                .font(.system(.caption2, design: .monospaced))
+                                .foregroundStyle(.green)
+                        }
+                        if let date = chunk.dateRecorded {
+                            Text(date, style: .date)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    Text(chunk.preview)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .italic()
+                }
+                .padding(8)
+                .background(Color(.tertiarySystemBackground))
+                .cornerRadius(8)
+            }
+        }
+    }
+}
+
+// MARK: - Verification Gates Grid
+
+private struct GatesGridView: View {
+    let verification: VerificationResult
+
+    private let gateNames: [(key: String, label: String, icon: String)] = [
+        ("retrievalConfidence", "Retrieval Confidence", "magnifyingglass"),
+        ("evidenceCoverage", "Evidence Coverage", "doc.text.magnifyingglass"),
+        ("numericSanity", "Numeric Sanity", "number"),
+        ("contradictionSweep", "Contradiction Sweep", "arrow.left.arrow.right"),
+        ("semanticGrounding", "Semantic Grounding", "brain"),
+        ("quoteFaithfulness", "Quote Faithfulness", "quote.bubble"),
+        ("generationQuality", "Generation Quality", "text.badge.checkmark"),
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(String(format: "Overall: %.0f%%", verification.overallScore * 100))
+                    .font(.caption2.bold())
+                Spacer()
+                Text("\(verification.gateResults.values.filter { $0 }.count)/7 passed")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            ForEach(gateNames, id: \.key) { gate in
+                let passed = verification.gateResults[gate.key] ?? false
+                HStack(spacing: 6) {
+                    Image(systemName: passed ? "checkmark.circle.fill" : "xmark.circle.fill")
+                        .font(.caption2)
+                        .foregroundStyle(passed ? .green : .red)
+                    Image(systemName: gate.icon)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 14)
+                    Text(gate.label)
+                        .font(.caption2)
+                    Spacer()
+                }
+            }
+
+            if !verification.warnings.isEmpty {
+                Divider()
+                ForEach(verification.warnings, id: \.self) { warning in
+                    HStack(alignment: .top, spacing: 4) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
+                        Text(warning)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Pipeline Metrics
+
+private struct PipelineMetricsView: View {
+    let meta: ResponseMetadata
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            metricRow("Total Time", String(format: "%.0fms", meta.totalTimeMs), icon: "clock")
+            metricRow("Search Time", String(format: "%.0fms", meta.searchTimeMs), icon: "magnifyingglass")
+            metricRow("Retrieved", "\(meta.retrievedChunkCount) chunks", icon: "square.stack.3d.up")
+            metricRow("Used", "\(meta.usedChunkCount) chunks", icon: "checkmark.square")
+            metricRow("Deep Think Passes", "\(meta.deepThinkPassesUsed)", icon: "brain.head.profile")
+
+            if meta.totalTimeMs > 0 && meta.searchTimeMs > 0 {
+                GeometryReader { geometry in
+                    let searchFrac = min(meta.searchTimeMs / meta.totalTimeMs, 1.0)
+                    HStack(spacing: 1) {
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(.blue)
+                            .frame(width: max(geometry.size.width * searchFrac, 2))
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(.purple)
+                    }
+                }
+                .frame(height: 6)
+
+                HStack(spacing: 12) {
+                    Label("Search", systemImage: "circle.fill")
+                        .font(.system(size: 8))
+                        .foregroundStyle(.blue)
+                    Label("Processing", systemImage: "circle.fill")
+                        .font(.system(size: 8))
+                        .foregroundStyle(.purple)
+                }
+            }
+        }
+    }
+
+    private func metricRow(_ label: String, _ value: String, icon: String) -> some View {
+        HStack {
+            Image(systemName: icon)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .frame(width: 14)
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(value)
+                .font(.system(.caption2, design: .monospaced))
         }
     }
 }

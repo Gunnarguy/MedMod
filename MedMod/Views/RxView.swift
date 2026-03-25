@@ -4,9 +4,21 @@ import SwiftData
 // MARK: - Patient-scoped Rx List (Image 10)
 struct RxListView: View {
     let patient: PatientProfile
+    @State private var searchText = ""
+    @State private var refillRequestedIDs: Set<String> = []
 
     private var medications: [LocalMedication] {
         (patient.medications ?? []).sorted { $0.writtenDate > $1.writtenDate }
+    }
+
+    private var filteredMedications: [LocalMedication] {
+        guard !searchText.isEmpty else { return medications }
+        let query = searchText.lowercased()
+        return medications.filter {
+            $0.medicationName.lowercased().contains(query)
+            || ($0.genericName?.lowercased().contains(query) ?? false)
+            || ($0.indication?.lowercased().contains(query) ?? false)
+        }
     }
 
     var body: some View {
@@ -19,8 +31,10 @@ struct RxListView: View {
                         description: Text("Import clinical records via HealthKit or add medications through the exam workflow.")
                     )
                 } else {
-                    ForEach(medications) { rx in
-                        RxRowView(rx: rx)
+                    ForEach(filteredMedications) { rx in
+                        RxRowView(rx: rx, refillRequested: refillRequestedIDs.contains(rx.rxID)) {
+                            withAnimation { _ = refillRequestedIDs.insert(rx.rxID) }
+                        }
                     }
                 }
             }
@@ -36,6 +50,7 @@ struct RxListView: View {
             }
         }
         .navigationTitle("Medications (Rx)")
+        .searchable(text: $searchText, prompt: "Search medications…")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         .listStyle(.insetGrouped)
@@ -45,6 +60,8 @@ struct RxListView: View {
 
 struct RxRowView: View {
     let rx: LocalMedication
+    var refillRequested: Bool = false
+    var onRequestRefill: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -105,6 +122,29 @@ struct RxRowView: View {
                 Text("Safety: \(safetyNotes.joined(separator: "; "))")
                     .font(.caption2)
                     .foregroundColor(.secondary)
+            }
+
+            // Refill request button
+            if rx.hasRefillsRemaining {
+                if refillRequested {
+                    Label("Refill Requested", systemImage: "checkmark.circle.fill")
+                        .font(.caption.bold())
+                        .foregroundColor(.green)
+                        .transition(.scale.combined(with: .opacity))
+                } else {
+                    Button {
+                        onRequestRefill?()
+                    } label: {
+                        Label("Request Refill", systemImage: "arrow.clockwise")
+                            .font(.caption.bold())
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.blue)
+                }
+            } else if rx.refills == 0 {
+                Label("No Refills — Contact Provider", systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundColor(.orange)
             }
         }
         .padding(.vertical, 4)
