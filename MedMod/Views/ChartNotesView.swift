@@ -4,9 +4,27 @@ import SwiftData
 /// Chart Notes view — shows all clinical records with full structured note data (Image 3 / Image 9)
 struct ChartNotesView: View {
     let patient: PatientProfile
+    @State private var searchText = ""
+    @State private var filterStatus: String? = nil
 
     private var records: [LocalClinicalRecord] {
         (patient.clinicalRecords ?? []).sorted { $0.dateRecorded > $1.dateRecorded }
+    }
+
+    private var filteredRecords: [LocalClinicalRecord] {
+        records.filter { record in
+            let matchesSearch = searchText.isEmpty || {
+                let query = searchText.lowercased()
+                return record.conditionName.lowercased().contains(query)
+                    || (record.ccHPI?.lowercased().contains(query) ?? false)
+                    || (record.examFindings?.lowercased().contains(query) ?? false)
+                    || (record.impressionsAndPlan?.lowercased().contains(query) ?? false)
+                    || (record.icd10Code?.lowercased().contains(query) ?? false)
+                    || (record.visitType?.lowercased().contains(query) ?? false)
+            }()
+            let matchesStatus = filterStatus == nil || record.status == filterStatus
+            return matchesSearch && matchesStatus
+        }
     }
 
     var body: some View {
@@ -18,7 +36,19 @@ struct ChartNotesView: View {
                     description: Text("Complete an exam workflow to generate structured chart notes via the on-device AI.")
                 )
             } else {
-                ForEach(records) { record in
+                if !searchText.isEmpty || filterStatus != nil {
+                    HStack {
+                        Text("\(filteredRecords.count) of \(records.count) notes")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        if filterStatus != nil {
+                            Button("Clear Filter") { filterStatus = nil }
+                                .font(.caption)
+                        }
+                    }
+                }
+                ForEach(filteredRecords) { record in
                     NavigationLink(destination: VisitRecordDetailView(record: record, patient: patient)) {
                         VStack(alignment: .leading, spacing: 6) {
                             HStack {
@@ -48,6 +78,15 @@ struct ChartNotesView: View {
                                             .font(.caption)
                                             .foregroundColor(.purple)
                                     }
+                                    if let icd10 = record.icd10Code, !icd10.isEmpty {
+                                        Text(icd10)
+                                            .font(.caption2.monospaced())
+                                            .padding(.horizontal, 4)
+                                            .padding(.vertical, 1)
+                                            .background(Color.blue.opacity(0.1))
+                                            .foregroundColor(.blue)
+                                            .cornerRadius(3)
+                                    }
                                 }
                             }
 
@@ -71,6 +110,24 @@ struct ChartNotesView: View {
             }
         }
         .navigationTitle("Chart Notes")
+        .searchable(text: $searchText, prompt: "Search notes, diagnoses, ICD-10…")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button { filterStatus = nil } label: {
+                        Label("All", systemImage: filterStatus == nil ? "checkmark" : "")
+                    }
+                    Button { filterStatus = "Final" } label: {
+                        Label("Final", systemImage: filterStatus == "Final" ? "checkmark" : "")
+                    }
+                    Button { filterStatus = "Preliminary" } label: {
+                        Label("Preliminary", systemImage: filterStatus == "Preliminary" ? "checkmark" : "")
+                    }
+                } label: {
+                    Label("Filter", systemImage: "line.3.horizontal.decrease.circle")
+                }
+            }
+        }
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         .listStyle(.insetGrouped)

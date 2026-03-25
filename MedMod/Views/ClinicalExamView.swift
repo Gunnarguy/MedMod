@@ -205,12 +205,40 @@ struct ClinicalExamWorkspace: View {
             .background(.ultraThinMaterial)
             .cornerRadius(12)
 
-            // Anatomical focus picker
+            // Anatomical focus — interactive body map
             VStack(alignment: .leading, spacing: 6) {
-                Text("Anatomical Focus").font(.headline)
-                Text("Select the body region being examined")
+                HStack {
+                    Text("Anatomical Focus").font(.headline)
+                    Spacer()
+                    if selectedRegion != nil {
+                        Button {
+                            selectedRegion = nil
+                            workflowState.selectedAnatomy = nil
+                        } label: {
+                            Label("Clear", systemImage: "xmark.circle.fill")
+                                .font(.caption).foregroundColor(.secondary)
+                        }
+                    }
+                }
+                Text("Tap the body region being examined")
                     .font(.caption).foregroundColor(.secondary)
 
+                if let region = selectedRegion {
+                    HStack(spacing: 8) {
+                        Image(systemName: "scope").foregroundColor(.purple)
+                        Text(AnatomicalRegion.displayName(for: region))
+                            .font(.subheadline.bold()).foregroundColor(.purple)
+                    }
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.purple.opacity(0.1))
+                    .cornerRadius(8)
+                }
+
+                examBodyMap
+                    .frame(maxWidth: .infinity)
+
+                // Fallback dropdown for regions not on the map
                 Menu {
                     Button("None") {
                         selectedRegion = nil
@@ -224,19 +252,23 @@ struct ClinicalExamWorkspace: View {
                     }
                 } label: {
                     HStack {
-                        Image(systemName: "figure.arms.open").foregroundColor(.purple)
-                        Text(selectedRegion.map { AnatomicalRegion.displayName(for: $0) } ?? "Select body region…")
-                            .foregroundColor(selectedRegion == nil ? .secondary : .primary)
+                        Image(systemName: "list.bullet")
+                            .foregroundColor(.purple)
+                        Text("Or pick from full list…")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                         Spacer()
-                        Image(systemName: "chevron.up.chevron.down").foregroundColor(.secondary)
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                     }
-                    .padding(12)
+                    .padding(8)
                     #if os(iOS)
                     .background(Color(UIColor.tertiarySystemBackground))
                     #else
                     .background(Color(NSColor.controlBackgroundColor))
                     #endif
-                    .cornerRadius(10)
+                    .cornerRadius(8)
                 }
             }
 
@@ -322,6 +354,91 @@ struct ClinicalExamWorkspace: View {
 
     private var canProcess: Bool {
         !workflowState.isProcessing && (!dictationText.isEmpty || selectedRegion != nil)
+    }
+
+    // MARK: - Exam Body Map (inline picker)
+
+    private func examRegionButton(_ region: String, label: String, width: CGFloat, height: CGFloat) -> some View {
+        let isSelected = selectedRegion == region
+        return Button {
+            selectedRegion = region
+            workflowState.selectedAnatomy = region
+        } label: {
+            ZStack {
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(isSelected ? Color.purple.opacity(0.35) : Color(.systemGray5))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 4)
+                            .strokeBorder(isSelected ? Color.purple : Color.clear, lineWidth: 2)
+                    )
+                Text(label)
+                    .font(.system(size: 7, weight: isSelected ? .bold : .regular))
+                    .foregroundColor(isSelected ? .purple : .secondary)
+            }
+            .frame(width: width, height: height)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var examBodyMap: some View {
+        VStack(spacing: 0) {
+            // Head
+            HStack(spacing: 4) {
+                examRegionButton("scalp", label: "Scalp", width: 50, height: 22)
+            }
+            HStack(spacing: 2) {
+                examRegionButton("left_ear", label: "L Ear", width: 18, height: 26)
+                VStack(spacing: 1) {
+                    examRegionButton("forehead", label: "Forehead", width: 50, height: 18)
+                    HStack(spacing: 1) {
+                        examRegionButton("left_cheek", label: "L", width: 16, height: 18)
+                        examRegionButton("facial_mesh_nose", label: "Nose", width: 16, height: 18)
+                        examRegionButton("right_cheek", label: "R", width: 16, height: 18)
+                    }
+                    HStack(spacing: 1) {
+                        examRegionButton("lips", label: "Lips", width: 24, height: 12)
+                        examRegionButton("chin", label: "Chin", width: 24, height: 12)
+                    }
+                }
+                examRegionButton("right_ear", label: "R Ear", width: 18, height: 26)
+            }
+
+            // Neck
+            examRegionButton("neck", label: "Neck", width: 36, height: 16)
+
+            // Torso + Arms
+            HStack(alignment: .top, spacing: 2) {
+                VStack(spacing: 2) {
+                    examRegionButton("left_shoulder", label: "L Shldr", width: 32, height: 20)
+                    examRegionButton("left_upper_extremity", label: "L Arm", width: 26, height: 60)
+                    examRegionButton("left_hand", label: "L Hand", width: 22, height: 24)
+                }
+                VStack(spacing: 2) {
+                    examRegionButton("torso", label: "Chest", width: 70, height: 42)
+                    examRegionButton("upper_abdomen", label: "Abdomen", width: 70, height: 34)
+                    examRegionButton("lower_back", label: "Lower Back", width: 70, height: 26)
+                }
+                VStack(spacing: 2) {
+                    examRegionButton("right_shoulder", label: "R Shldr", width: 32, height: 20)
+                    examRegionButton("right_upper_extremity", label: "R Arm", width: 26, height: 60)
+                    examRegionButton("right_hand", label: "R Hand", width: 22, height: 24)
+                }
+            }
+
+            // Legs
+            HStack(spacing: 6) {
+                VStack(spacing: 2) {
+                    examRegionButton("left_lower_extremity", label: "L Leg", width: 32, height: 66)
+                    examRegionButton("left_foot", label: "L Foot", width: 28, height: 18)
+                }
+                VStack(spacing: 2) {
+                    examRegionButton("right_lower_extremity", label: "R Leg", width: 32, height: 66)
+                    examRegionButton("right_foot", label: "R Foot", width: 28, height: 18)
+                }
+            }
+        }
+        .padding(10)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
     }
 
     // MARK: - Intelligence Panel
