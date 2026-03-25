@@ -31,6 +31,16 @@ final class ClinicalRAGService: ObservableObject {
     @Published var indexedChunkCount: Int = 0
     @Published var lastIndexTime: Date?
     @Published var isIndexing: Bool = false
+    @Published var thinkingSteps: [ThinkingStep] = []
+
+    /// Append a thinking step for live UI streaming.
+    func addStep(_ phase: ThinkingPhase, _ title: String, _ detail: String = "", icon: String = "circle.fill", metrics: [String: String] = [:]) {
+        thinkingSteps.append(ThinkingStep(phase: phase, title: title, detail: detail, icon: icon, metrics: metrics))
+    }
+
+    private func formatGateName(_ key: String) -> String {
+        key.replacingOccurrences(of: "([a-z])([A-Z])", with: "$1 $2", options: .regularExpression).capitalized
+    }
 
     private init() {
         embeddingService = ClinicalEmbeddingService()
@@ -149,18 +159,34 @@ final class ClinicalRAGService: ObservableObject {
     /// Query with verification gates.
     func queryWithVerification(text: String, patientScope: UUID? = nil) async throws -> RAGResponse {
         let startTime = CFAbsoluteTimeGetCurrent()
+        thinkingSteps = []
 
+        addStep(.queryAnalysis, "Analyzing query", "Extracting clinical intent and key terms", icon: "magnifyingglass")
+
+        let vectorCount = await vectorStore.count
+        addStep(.vectorSearch, "Hybrid search", "Searching \(vectorCount) vectors + FTS5 index", icon: "arrow.triangle.branch")
+        let searchStart = CFAbsoluteTimeGetCurrent()
         let candidates = try await hybridSearch.search(query: text, topK: 10, patientScope: patientScope)
-        let (context, usedChunks) = await ragEngine.processChunks(query: text, candidates: candidates)
+        let searchMs = (CFAbsoluteTimeGetCurrent() - searchStart) * 1000
 
-        // Run verification
-        let verification = await verificationGates.verify(
-            query: text,
-            responseText: context,
-            retrievedChunks: usedChunks
-        )
+        let patientSet = Set(candidates.map { $0.chunk.patientId })
+        addStep(.rrfFusion, "RRF fusion: \(candidates.count) candidates", "\(patientSet.count) patients, k=60 reciprocal rank", icon: "arrow.triangle.merge", metrics: ["candidates": "\(candidates.count)", "patients": "\(patientSet.count)", "search_ms": String(format: "%.0f", searchMs)])
+
+        addStep(.reranking, "Reranking candidates", "Cross-encoder scoring + heuristic boosting", icon: "arrow.up.arrow.down")
+        let (context, usedChunks) = await ragEngine.processChunks(query: text, candidates: candidates)
+        addStep(.mmrDiversity, "\(usedChunks.count) chunks selected", "MMR \u{03BB}=0.7 diversity + token budget + Lost-in-Middle reorder", icon: "square.grid.3x3")
+
+        addStep(.verification, "Running 7 verification gates", "Retrieval \u{00B7} Evidence \u{00B7} Numeric \u{00B7} Contradiction \u{00B7} Semantic \u{00B7} Faithfulness \u{00B7} Quality", icon: "checkmark.shield")
+        let verification = await verificationGates.verify(query: text, responseText: context, retrievedChunks: usedChunks)
+
+        let passedCount = verification.gateResults.values.filter { $0 }.count
+        let gateDetail = verification.gateResults.sorted(by: { $0.key < $1.key }).map { "\($0.value ? "\u{2713}" : "\u{2717}") \(formatGateName($0.key))" }.joined(separator: " \u{00B7} ")
+        addStep(.verification, "\(passedCount)/7 gates \u{2014} \(verification.confidence.rawValue.capitalized)", gateDetail, icon: verification.confidence == .high ? "checkmark.shield.fill" : "exclamationmark.shield")
 
         let totalMs = (CFAbsoluteTimeGetCurrent() - startTime) * 1000
+        addStep(.complete, "Pipeline complete", String(format: "%.0fms", totalMs), icon: "checkmark.circle.fill")
+
+        let summaries = usedChunks.map { ChunkSummary(from: $0) }
 
         return RAGResponse(
             context: context,
@@ -169,10 +195,12 @@ final class ClinicalRAGService: ObservableObject {
                 retrievedChunkCount: candidates.count,
                 usedChunkCount: usedChunks.count,
                 embeddingTimeMs: 0,
-                searchTimeMs: 0,
+                searchTimeMs: searchMs,
                 totalTimeMs: totalMs,
                 verification: verification,
-                deepThinkPassesUsed: 1
+                deepThinkPassesUsed: 1,
+                thinkingSteps: thinkingSteps,
+                sourceChunks: summaries
             )
         )
     }
@@ -180,11 +208,15 @@ final class ClinicalRAGService: ObservableObject {
     /// Deep Think: multi-pass retrieval with iterative refinement.
     func deepThink(text: String, patientScope: UUID? = nil, passes: Int = 3) async throws -> RAGResponse {
         let startTime = CFAbsoluteTimeGetCurrent()
+        thinkingSteps = []
+
+        addStep(.queryAnalysis, "Deep Think: \(passes)-pass retrieval", "Multi-pass search with iterative query refinement", icon: "brain.head.profile.fill")
 
         var allChunks: [RetrievedChunk] = []
         var queries = [text]
 
         for pass in 0..<passes {
+            addStep(.deepThinkPass, "Pass \(pass + 1)/\(passes)", "Searching with \(queries.count) quer\(queries.count == 1 ? "y" : "ies")", icon: "arrow.clockwise")
             AppLogger.ai.info("🧠 Deep Think pass \(pass + 1)/\(passes)")
 
             for q in queries {
@@ -192,27 +224,43 @@ final class ClinicalRAGService: ObservableObject {
                 allChunks.append(contentsOf: candidates)
             }
 
+            let passPatients = Set(allChunks.map { $0.chunk.patientId }).count
+            addStep(.rrfFusion, "Pass \(pass + 1): \(allChunks.count) total chunks", "\(passPatients) patients covered", icon: "arrow.triangle.merge")
+
             // Generate follow-up queries from current context (simple extraction)
             if pass < passes - 1 {
                 queries = extractFollowUpQueries(from: allChunks, originalQuery: text)
+                if !queries.isEmpty {
+                    addStep(.followUpExtraction, "Follow-up queries", queries.joined(separator: ", "), icon: "text.magnifyingglass")
+                }
             }
         }
 
         // Deduplicate by chunk ID
         var seen = Set<UUID>()
         let unique = allChunks.filter { seen.insert($0.chunk.id).inserted }
+        addStep(.reranking, "Dedup: \(allChunks.count) → \(unique.count) unique", "Cross-encoder reranking \(unique.count) candidates", icon: "arrow.up.arrow.down")
 
         // Process all accumulated chunks
         let (context, usedChunks) = await ragEngine.processChunks(query: text, candidates: unique, maxChunks: 12)
+        addStep(.mmrDiversity, "\(usedChunks.count) chunks selected", "MMR diversity + token budget + Lost-in-Middle reorder", icon: "square.grid.3x3")
 
         // Verify
+        addStep(.verification, "Running 7 verification gates", "Full clinical verification pipeline", icon: "checkmark.shield")
         let verification = await verificationGates.verify(
             query: text,
             responseText: context,
             retrievedChunks: usedChunks
         )
 
+        let passedCount = verification.gateResults.values.filter { $0 }.count
+        let gateDetail = verification.gateResults.sorted(by: { $0.key < $1.key }).map { "\($0.value ? "✓" : "✗") \(formatGateName($0.key))" }.joined(separator: " · ")
+        addStep(.verification, "\(passedCount)/7 gates — \(verification.confidence.rawValue.capitalized)", gateDetail, icon: verification.confidence == .high ? "checkmark.shield.fill" : "exclamationmark.shield")
+
         let totalMs = (CFAbsoluteTimeGetCurrent() - startTime) * 1000
+        addStep(.complete, "Deep Think complete", String(format: "%d passes, %.0fms total", passes, totalMs), icon: "checkmark.circle.fill")
+
+        let summaries = usedChunks.map { ChunkSummary(from: $0) }
 
         return RAGResponse(
             context: context,
@@ -224,7 +272,9 @@ final class ClinicalRAGService: ObservableObject {
                 searchTimeMs: 0,
                 totalTimeMs: totalMs,
                 verification: verification,
-                deepThinkPassesUsed: passes
+                deepThinkPassesUsed: passes,
+                thinkingSteps: thinkingSteps,
+                sourceChunks: summaries
             )
         )
     }

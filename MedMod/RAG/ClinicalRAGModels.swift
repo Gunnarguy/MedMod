@@ -133,6 +133,77 @@ struct VerificationResult: Sendable {
     let warnings: [String]
 }
 
+// MARK: - Thinking Phase
+
+/// Phases of the RAG pipeline for thinking visualization.
+enum ThinkingPhase: String, Sendable {
+    case queryAnalysis
+    case embedding
+    case vectorSearch
+    case keywordSearch
+    case rrfFusion
+    case reranking
+    case mmrDiversity
+    case tokenBudget
+    case lostInMiddle
+    case contextAssembly
+    case verification
+    case deepThinkPass
+    case followUpExtraction
+    case generation
+    case complete
+}
+
+// MARK: - Thinking Step
+
+/// A single step in the RAG pipeline's thinking process.
+struct ThinkingStep: Identifiable, Sendable {
+    let id: UUID
+    let phase: ThinkingPhase
+    let title: String
+    let detail: String
+    let timestamp: Date
+    let icon: String
+    let metrics: [String: String]
+
+    init(phase: ThinkingPhase, title: String, detail: String = "", icon: String = "circle.fill", metrics: [String: String] = [:]) {
+        self.id = UUID()
+        self.phase = phase
+        self.title = title
+        self.detail = detail
+        self.timestamp = Date()
+        self.icon = icon
+        self.metrics = metrics
+    }
+}
+
+// MARK: - Chunk Summary
+
+/// Lightweight UI-friendly summary of a retrieved chunk.
+struct ChunkSummary: Identifiable, Sendable {
+    let id: UUID
+    let patientName: String
+    let sectionTitle: String
+    let category: ClinicalCategory
+    let score: Double
+    let vectorRank: Int?
+    let keywordRank: Int?
+    let preview: String
+    let dateRecorded: Date?
+
+    init(from retrieved: RetrievedChunk) {
+        self.id = retrieved.chunk.id
+        self.patientName = retrieved.chunk.metadata.patientName
+        self.sectionTitle = retrieved.chunk.metadata.sectionTitle
+        self.category = retrieved.chunk.metadata.clinicalCategory
+        self.score = retrieved.score
+        self.vectorRank = retrieved.vectorRank
+        self.keywordRank = retrieved.keywordRank
+        self.preview = String(retrieved.chunk.content.prefix(150))
+        self.dateRecorded = retrieved.chunk.metadata.dateRecorded
+    }
+}
+
 // MARK: - Response Metadata
 
 /// Metadata about the RAG response generation.
@@ -144,6 +215,30 @@ struct ResponseMetadata: Sendable {
     let totalTimeMs: Double
     let verification: VerificationResult?
     let deepThinkPassesUsed: Int
+    let thinkingSteps: [ThinkingStep]
+    let sourceChunks: [ChunkSummary]
+
+    init(
+        retrievedChunkCount: Int,
+        usedChunkCount: Int,
+        embeddingTimeMs: Double,
+        searchTimeMs: Double,
+        totalTimeMs: Double,
+        verification: VerificationResult?,
+        deepThinkPassesUsed: Int,
+        thinkingSteps: [ThinkingStep] = [],
+        sourceChunks: [ChunkSummary] = []
+    ) {
+        self.retrievedChunkCount = retrievedChunkCount
+        self.usedChunkCount = usedChunkCount
+        self.embeddingTimeMs = embeddingTimeMs
+        self.searchTimeMs = searchTimeMs
+        self.totalTimeMs = totalTimeMs
+        self.verification = verification
+        self.deepThinkPassesUsed = deepThinkPassesUsed
+        self.thinkingSteps = thinkingSteps
+        self.sourceChunks = sourceChunks
+    }
 }
 
 // MARK: - RAG Response
