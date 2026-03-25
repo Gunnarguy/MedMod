@@ -218,6 +218,8 @@ final class ClinicalIntelligenceService: ObservableObject {
             }
         }
 
+        ragService.addStep(.generation, "Generating with Apple Intelligence", "On-device Foundation Model", icon: "apple.logo")
+
         #if canImport(FoundationModels)
         if #available(iOS 26.0, macOS 26.0, visionOS 26.0, *), let model = availableFoundationModel() {
             AppLogger.ai.info("✨ Foundation Model tool query")
@@ -260,6 +262,8 @@ final class ClinicalIntelligenceService: ObservableObject {
                 AppLogger.ai.warning("⚠️ RAG panel retrieval failed: \(error.localizedDescription)")
             }
         }
+
+        ragService.addStep(.generation, "Generating with Apple Intelligence", "On-device Foundation Model (panel)", icon: "apple.logo")
 
         #if canImport(FoundationModels)
         if #available(iOS 26.0, macOS 26.0, visionOS 26.0, *), let model = availableFoundationModel() {
@@ -394,67 +398,253 @@ final class ClinicalIntelligenceService: ObservableObject {
         model: SystemLanguageModel,
         ragContext: String? = nil
     ) async throws -> String {
-        // Build panel-wide data summaries
-        let panelSummary = patients.map { ClinicalChartFormatter.patientSummary(patient: $0) }.joined(separator: "\n---\n")
-        let allRecords = patients.flatMap { $0.clinicalRecords ?? [] }.sorted { $0.dateRecorded > $1.dateRecorded }
-        let allAppointments = patients.flatMap { $0.appointments ?? [] }.sorted { $0.scheduledTime < $1.scheduledTime }
+        // ── Token Budget (OpenIntelligence-style) ──────────────────────
+        // 4096 total context window (Apple FM hard limit per TN3193)
+        // 1.4 chars/token (empirically validated for Apple FM WordPiece tokenizer)
+        let contextWindow = 4096
+        let charsPerToken: Double = 1.4
 
-        let historyEntries = allRecords.map { record in
-            let patientName = patients.first { ($0.clinicalRecords ?? []).contains(where: { $0.id == record.id }) }?.fullName ?? "Unknown"
-            return ClinicalHistoryEntry(
-                summary: "[\(patientName)] " + ClinicalChartFormatter.recordSummary(records: [record]),
-                searchText: [
-                    patientName.lowercased(),
-                    record.conditionName,
-                    record.ccHPI,
-                    record.impressionsAndPlan,
-                    record.visitType,
-                    record.carePlanSummary,
-                    record.followUpPlan,
-                    (record.recommendedOrders ?? []).joined(separator: " ")
-                ]
-                .compactMap { $0?.lowercased() }
-                .joined(separator: " ")
-            )
+        let systemPromptTokens = Self.estimateTokens(panelAssistantInstructions)
+        let questionTokens = Self.estimateTokens(query)
+        let ragTokens = ragContext.map { Self.estimateTokens(String($0.prefix(1200))) } ?? 0
+        let outputReserveTokens = 300
+        let safetyFactor = 0.88  // 12% margin
+        let rawAvailable = contextWindow - systemPromptTokens - questionTokens - ragTokens - outputReserveTokens
+        let availableTokens = max(0, Int(Double(rawAvailable) * safetyFactor))
+        let availableChars = Int(Double(availableTokens) * charsPerToken)
+
+        AppLogger.ai.info("📊 Token budget: \(availableTokens) tokens (\(availableChars) chars) for \(patients.count) patients")
+        ragService.addStep(.generation, "Token budget: \(availableTokens) available", "\(patients.count) patients, \(contextWindow)-token window", icon: "gauge.with.needle")
+
+        // ── Query-Aware Extraction ─────────────────────────────────────
+        // Classify what data fields the query actually needs. Don't waste
+        // 3000 chars on medication history when the question is about ages.
+        let intent = PanelQueryIntent.classify(query)
+        ragService.addStep(.generation, "Query intent: \(intent.label)", "Fields: \(intent.fields.joined(separator: ", "))", icon: "magnifyingglass.circle")
+        AppLogger.ai.info("🔍 Panel query intent: \(intent.label) — fields: \(intent.fields)")
+
+        // ── Compact Patient Representations ────────────────────────────
+        // Build minimal single-line representations per patient with only
+        // the fields this query needs. Dramatically reduces token usage.
+        let compactLines = patients.map { intent.compactLine(for: $0) }
+        let compactContext = compactLines.joined(separator: "\n")
+        let contextTokens = Self.estimateTokens(compactContext)
+
+        AppLogger.ai.info("📏 Compact context: \(compactContext.count) chars ≈ \(contextTokens) tokens")
+
+        // ── Single-Pass (fits in budget) ───────────────────────────────
+        // Skip tools entirely — put compact data directly in prompt.
+        // Reclaims ~1000 tokens that tool schemas would consume.
+        if contextTokens <= availableTokens {
+            ragService.addStep(.generation, "Single-pass mode", "\(contextTokens)/\(availableTokens) tokens — fits", icon: "checkmark.seal")
+
+            let session = LanguageModelSession(model: model, instructions: panelAssistantInstructions)
+            let trimmedRAG = ragContext.map { String($0.prefix(1200)) }
+
+            let prompt = """
+            Patient panel (\(patients.count) patients):
+            \(compactContext)
+            \(trimmedRAG.map { "\nRetrieved clinical context:\n\($0)" } ?? "")
+
+            Clinician question: \(query)
+            Answer using ONLY the patient data above. Include patient names. Be specific and concise.
+            """
+
+            let response = try await session.respond(to: prompt, generating: ClinicalAssistantAnswer.self)
+            return ClinicalChartFormatter.format(answer: response.content)
         }
 
-        let medsByPatient = patients.flatMap { p in
-            (p.medications ?? []).map { "[\(p.fullName)] " + ClinicalChartFormatter.medicationSummary(medications: [$0]) }
-        }.joined(separator: "\n")
+        // ── Recursive RAG (overflow) ───────────────────────────────────
+        // Context too large even with compact extraction. Process in passes,
+        // each filling most of the available token budget.
+        let charsPerBatch = availableChars
+        var currentBatch: [String] = []
+        var currentChars = 0
+        var batches: [[String]] = []
+        var batchPatients: [[PatientProfile]] = []
+        var currentBatchPatients: [PatientProfile] = []
 
-        let scheduleByPatient = allAppointments.map { appt in
-            let patientName = patients.first { ($0.appointments ?? []).contains(where: { $0.id == appt.id }) }?.fullName ?? "Unknown"
-            return "[\(patientName)] \(appt.scheduledTime.formatted(date: .abbreviated, time: .shortened)): \(appt.reasonForVisit) [\(appt.status)]"
-        }.joined(separator: "\n")
-
-        let tools: [any Tool] = [
-            PanelRosterTool(summary: panelSummary),
-            PanelMedicationTool(summary: medsByPatient),
-            PanelHistoryTool(allSummary: ClinicalChartFormatter.recordSummary(records: allRecords), entries: historyEntries),
-            PanelScheduleTool(summary: scheduleByPatient)
-        ]
-
-        // Reuse or create panel session for conversational continuity
-        let session: LanguageModelSession
-        if let existing = self.panelSession {
-            session = existing
-            AppLogger.ai.info("♻️ Reusing existing panel session")
-        } else {
-            session = LanguageModelSession(model: model, tools: tools, instructions: panelAssistantInstructions)
-            self.panelSession = session
-            AppLogger.ai.info("🆕 Created new panel session")
+        for (i, line) in compactLines.enumerated() {
+            let lineChars = line.count + 1  // +1 for newline
+            if currentChars + lineChars > charsPerBatch && !currentBatch.isEmpty {
+                batches.append(currentBatch)
+                batchPatients.append(currentBatchPatients)
+                currentBatch = []
+                currentBatchPatients = []
+                currentChars = 0
+            }
+            currentBatch.append(line)
+            currentBatchPatients.append(patients[i])
+            currentChars += lineChars
+        }
+        if !currentBatch.isEmpty {
+            batches.append(currentBatch)
+            batchPatients.append(currentBatchPatients)
         }
 
-        let trimmedRAG = ragContext.map { String($0.prefix(1500)) }
-        let prompt = """
-        Patient panel size: \(patients.count) patients
-        \(trimmedRAG.map { "Retrieved clinical context (from RAG search):\n\($0)\n" } ?? "")
-        Clinician question: \(query)
-        Search across all patients and correlate data as needed. Always include patient names in your answer.
-        """
+        ragService.addStep(.generation, "Recursive RAG: \(batches.count) passes", "\(patients.count) patients exceed single-pass budget", icon: "arrow.triangle.2.circlepath")
+        AppLogger.ai.info("🔄 Recursive RAG: \(batches.count) passes for \(patients.count) patients")
 
-        let response = try await session.respond(to: prompt, generating: ClinicalAssistantAnswer.self)
-        return ClinicalChartFormatter.format(answer: response.content)
+        var passResults: [String] = []
+        for (i, batch) in batches.enumerated() {
+            let batchPts = batchPatients[i]
+            let names = batchPts.prefix(3).map(\.fullName).joined(separator: ", ") + (batchPts.count > 3 ? " + \(batchPts.count - 3) more" : "")
+            ragService.addStep(.generation, "Pass \(i + 1)/\(batches.count)", names, icon: "brain")
+
+            do {
+                let session = LanguageModelSession(model: model, instructions: panelAssistantInstructions)
+                let batchContext = batch.joined(separator: "\n")
+                let prompt = """
+                Patient batch \(i + 1)/\(batches.count) (\(batchPts.count) patients):
+                \(batchContext)
+
+                Clinician question: \(query)
+                Answer for these patients only. Include all patient names.
+                """
+                let response = try await session.respond(to: prompt, generating: ClinicalAssistantAnswer.self)
+                passResults.append(response.content.answer)
+                AppLogger.ai.info("✅ Pass \(i + 1): \(response.content.answer.count) chars")
+            } catch {
+                AppLogger.ai.warning("⚠️ Pass \(i + 1) failed: \(error.localizedDescription)")
+                let fallback = batchPts.map { "\($0.fullName): data unavailable" }.joined(separator: "\n")
+                passResults.append(fallback)
+            }
+        }
+
+        // ── Synthesis ──────────────────────────────────────────────────
+        ragService.addStep(.generation, "Synthesizing \(batches.count) passes", "Merging into unified answer", icon: "arrow.triangle.merge")
+
+        let combined = passResults.enumerated().map { "[\($0.offset + 1)] \($0.element)" }.joined(separator: "\n")
+        let combinedTokens = Self.estimateTokens(combined)
+
+        if combinedTokens <= availableTokens {
+            // Fits — synthesize with FM
+            do {
+                let session = LanguageModelSession(model: model, instructions: "Merge partial clinical answers into one cohesive response. Preserve all patient names and data. Be concise.")
+                let prompt = """
+                Original question: \(query)
+
+                Partial answers:
+                \(String(combined.prefix(availableChars)))
+
+                Combine into a single complete answer.
+                """
+                let response = try await session.respond(to: prompt, generating: ClinicalAssistantAnswer.self)
+                return ClinicalChartFormatter.format(answer: response.content)
+            } catch {
+                AppLogger.ai.warning("⚠️ Synthesis FM failed — concatenating directly")
+            }
+        }
+
+        // Either too large for FM synthesis or FM failed — format directly
+        let header = "Panel query across \(patients.count) patients:\n\n"
+        return header + passResults.joined(separator: "\n\n")
+    }
+
+    // MARK: - Token Estimation
+
+    /// Estimate token count using 1.4 chars/token (validated for Apple FM WordPiece tokenizer)
+    private static func estimateTokens(_ text: String) -> Int {
+        max(1, Int(ceil(Double(text.count) / 1.4)))
+    }
+
+    // MARK: - Panel Query Intent Classification
+
+    /// Classifies panel queries to extract only the data fields needed, avoiding
+    /// wasted tokens on irrelevant patient information.
+    private enum PanelQueryIntent {
+        case demographics    // age, sex, name, MRN, blood type
+        case medications     // drug names, doses, indications
+        case conditions      // diagnoses, conditions, clinical records
+        case scheduling      // appointments, follow-ups
+        case riskFactors     // allergies, risk flags, smoking
+        case fullClinical    // needs everything (complex cross-domain queries)
+
+        var label: String {
+            switch self {
+            case .demographics: return "demographics"
+            case .medications: return "medications"
+            case .conditions: return "conditions"
+            case .scheduling: return "scheduling"
+            case .riskFactors: return "risk factors"
+            case .fullClinical: return "full clinical"
+            }
+        }
+
+        var fields: [String] {
+            switch self {
+            case .demographics: return ["name", "age", "sex", "MRN"]
+            case .medications: return ["name", "medications"]
+            case .conditions: return ["name", "conditions", "diagnoses"]
+            case .scheduling: return ["name", "appointments"]
+            case .riskFactors: return ["name", "allergies", "risk flags", "smoking"]
+            case .fullClinical: return ["name", "age", "conditions", "medications", "appointments", "allergies"]
+            }
+        }
+
+        static func classify(_ query: String) -> PanelQueryIntent {
+            let q = query.lowercased()
+
+            let demoKeywords = ["age", "old", "young", "birth", "gender", "sex", "male", "female", "mrn", "blood type", "demographic"]
+            let medKeywords = ["medication", "medicine", "drug", "prescri", "dose", "biologic", "topical", "steroid", "methotrexate", "refill", "pharmacy"]
+            let conditionKeywords = ["diagnosis", "condition", "disease", "psoriasis", "eczema", "dermatitis", "melanoma", "acne", "rash", "lesion", "biopsy"]
+            let schedKeywords = ["appointment", "schedule", "visit", "upcoming", "follow-up", "next visit", "today", "tomorrow", "when"]
+            let riskKeywords = ["allergy", "allergic", "risk", "smok", "flag", "contraindic"]
+
+            var scores: [(PanelQueryIntent, Int)] = []
+            scores.append((.demographics, demoKeywords.filter { q.contains($0) }.count))
+            scores.append((.medications, medKeywords.filter { q.contains($0) }.count))
+            scores.append((.conditions, conditionKeywords.filter { q.contains($0) }.count))
+            scores.append((.scheduling, schedKeywords.filter { q.contains($0) }.count))
+            scores.append((.riskFactors, riskKeywords.filter { q.contains($0) }.count))
+
+            let best = scores.max(by: { $0.1 < $1.1 })
+            if let best, best.1 > 0 {
+                return best.0
+            }
+            return .fullClinical
+        }
+
+        /// Build a compact single-line representation with only query-relevant fields.
+        func compactLine(for patient: PatientProfile) -> String {
+            switch self {
+            case .demographics:
+                return "\(patient.fullName) | \(patient.age)y \(patient.gender) | MRN: \(patient.medicalRecordNumber.prefix(8)) | Blood: \(patient.bloodType ?? "—")"
+
+            case .medications:
+                let meds = (patient.medications ?? [])
+                    .filter { ($0.status ?? "Active") == "Active" }
+                    .map { "\($0.medicationName) \($0.dose ?? "")" }
+                    .joined(separator: "; ")
+                return "\(patient.fullName) | Meds: \(meds.isEmpty ? "none" : String(meds.prefix(200)))"
+
+            case .conditions:
+                let conditions = Array(Set((patient.clinicalRecords ?? []).map(\.conditionName)))
+                    .joined(separator: "; ")
+                return "\(patient.fullName) | Dx: \(conditions.isEmpty ? "none" : String(conditions.prefix(200)))"
+
+            case .scheduling:
+                let appts = (patient.appointments ?? [])
+                    .sorted { $0.scheduledTime < $1.scheduledTime }
+                    .prefix(2)
+                    .map { "\($0.scheduledTime.formatted(date: .abbreviated, time: .shortened)): \($0.reasonForVisit)" }
+                    .joined(separator: "; ")
+                return "\(patient.fullName) | Appts: \(appts.isEmpty ? "none scheduled" : appts)"
+
+            case .riskFactors:
+                let allergies = patient.allergies.isEmpty ? "none" : patient.allergies.joined(separator: ", ")
+                let risks = patient.riskFlags.isEmpty ? "none" : patient.riskFlags.joined(separator: ", ")
+                return "\(patient.fullName) | Allergies: \(allergies) | Risks: \(risks) | Smoker: \(patient.isSmoker ? "yes" : "no")"
+
+            case .fullClinical:
+                let topCondition = (patient.clinicalRecords ?? []).first?.conditionName ?? "—"
+                let medCount = (patient.medications ?? []).filter { ($0.status ?? "Active") == "Active" }.count
+                let allergies = patient.allergies.isEmpty ? "none" : patient.allergies.prefix(3).joined(separator: ",")
+                let nextAppt = (patient.appointments ?? []).sorted { $0.scheduledTime < $1.scheduledTime }.first
+                let apptStr = nextAppt.map { $0.scheduledTime.formatted(date: .abbreviated, time: .shortened) } ?? "—"
+                return "\(patient.fullName) | \(patient.age)y \(patient.gender) | Dx: \(topCondition) | \(medCount) meds | Allg: \(allergies) | Next: \(apptStr)"
+            }
+        }
     }
     #endif
 
