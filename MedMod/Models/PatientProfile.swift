@@ -22,6 +22,7 @@ final class PatientProfile {
     @Relationship(deleteRule: .cascade) var clinicalRecords: [LocalClinicalRecord]?
     @Relationship(deleteRule: .cascade) var medications: [LocalMedication]?
     @Relationship(deleteRule: .cascade) var appointments: [Appointment]?
+    @Relationship(deleteRule: .cascade) var clinicalPhotos: [ClinicalPhoto]?
 
     init(
         id: UUID = UUID(),
@@ -58,6 +59,7 @@ final class PatientProfile {
         self.clinicalRecords = []
         self.medications = []
         self.appointments = []
+        self.clinicalPhotos = []
     }
 
     var fullName: String {

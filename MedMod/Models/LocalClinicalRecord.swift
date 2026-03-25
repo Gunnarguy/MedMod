@@ -22,13 +22,15 @@ final class LocalClinicalRecord {
     var followUpPlan: String?
     var recommendedOrders: [String]?
     var carePlanSummary: String?
+    var icd10Code: String?
+    var clinicalPhotoPaths: [String]?
 
     init(recordID: String, dateRecorded: Date, conditionName: String, status: String, isHiddenFromPortal: Bool = false,
          visitType: String? = nil, severity: String? = nil,
          ccHPI: String? = nil, reviewOfSystems: String? = nil, examFindings: String? = nil,
          impressionsAndPlan: String? = nil, affectedAnatomicalZones: [String]? = nil, providerSignature: String? = nil,
          patientInstructions: String? = nil, followUpPlan: String? = nil, recommendedOrders: [String]? = nil,
-         carePlanSummary: String? = nil) {
+         carePlanSummary: String? = nil, icd10Code: String? = nil, clinicalPhotoPaths: [String]? = nil) {
         self.recordID = recordID
         self.dateRecorded = dateRecorded
         self.conditionName = conditionName
@@ -46,5 +48,7 @@ final class LocalClinicalRecord {
         self.followUpPlan = followUpPlan
         self.recommendedOrders = recommendedOrders
         self.carePlanSummary = carePlanSummary
+        self.icd10Code = icd10Code
+        self.clinicalPhotoPaths = clinicalPhotoPaths
     }
 }
