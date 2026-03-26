@@ -300,7 +300,7 @@ struct ContentView: View {
             reasonForVisit: "Urgent: new rapidly growing lesion", status: "In Exam")
 
         // ──────────────────────────────────────────────
-        // MARK: – Schedule-Only Patients (fill out realistic daily volume)
+        // MARK: – Schedule-Only Patients (realistic daily volume ~10)
         // ──────────────────────────────────────────────
 
         let thomasRandall = PatientProfile(medicalRecordNumber: "MM-2001", firstName: "Thomas", lastName: "Randall",
@@ -313,46 +313,20 @@ struct ContentView: View {
             dateOfBirth: Date(timeIntervalSince1970: 126230400), gender: "Male", isSmoker: true)
         let helenWhitfield = PatientProfile(medicalRecordNumber: "MM-2005", firstName: "Helen", lastName: "Whitfield",
             dateOfBirth: Date(timeIntervalSince1970: 63072000), gender: "Female", isSmoker: false)
-        let jamesFoster = PatientProfile(medicalRecordNumber: "MM-2006", firstName: "James", lastName: "Foster",
-            dateOfBirth: Date(timeIntervalSince1970: 536457600), gender: "Male", isSmoker: false)
-        let jeromeWashington = PatientProfile(medicalRecordNumber: "MM-2007", firstName: "Jerome", lastName: "Washington",
-            dateOfBirth: Date(timeIntervalSince1970: 410227200), gender: "Male", isSmoker: false)
-        let anikaPatel = PatientProfile(medicalRecordNumber: "MM-2008", firstName: "Anika", lastName: "Patel",
-            dateOfBirth: Date(timeIntervalSince1970: 694224000), gender: "Female", isSmoker: false)
-        let williamNakamura = PatientProfile(medicalRecordNumber: "MM-2009", firstName: "William", lastName: "Nakamura",
-            dateOfBirth: Date(timeIntervalSince1970: 252460800), gender: "Male", isSmoker: false)
-        let lisaTran = PatientProfile(medicalRecordNumber: "MM-2010", firstName: "Lisa", lastName: "Tran",
-            dateOfBirth: Date(timeIntervalSince1970: 441763200), gender: "Female", isSmoker: false)
-        let derekSimmons = PatientProfile(medicalRecordNumber: "MM-2011", firstName: "Derek", lastName: "Simmons",
-            dateOfBirth: Date(timeIntervalSince1970: 315532800), gender: "Male", isSmoker: false)
 
         let schedAppt11 = Appointment(appointmentID: "APT-011",
             scheduledTime: todayAt(7, 45), reasonForVisit: "Psoriasis biologic injection", status: "Completed")
         let schedAppt12 = Appointment(appointmentID: "APT-012",
-            scheduledTime: todayAt(8, 0), reasonForVisit: "Annual skin exam", status: "Completed")
+            scheduledTime: todayAt(10, 0), reasonForVisit: "Annual skin exam", status: "Confirmed")
         let schedAppt13 = Appointment(appointmentID: "APT-013",
-            scheduledTime: todayAt(9, 15), reasonForVisit: "Mohs surgery consult", status: "Roomed")
+            scheduledTime: todayAt(10, 30), reasonForVisit: "Mohs surgery consult", status: "Checked In")
         let schedAppt14 = Appointment(appointmentID: "APT-014",
-            scheduledTime: todayAt(9, 45), reasonForVisit: "AK cryotherapy session", status: "Checked In")
+            scheduledTime: todayAt(13, 0), reasonForVisit: "AK cryotherapy session", status: "Scheduled")
         let schedAppt15 = Appointment(appointmentID: "APT-015",
-            scheduledTime: todayAt(10, 0), reasonForVisit: "Biopsy pathology review", status: "Confirmed")
-        let schedAppt16 = Appointment(appointmentID: "APT-016",
-            scheduledTime: todayAt(10, 30), reasonForVisit: "New patient: suspicious mole evaluation", status: "Confirmed")
-        let schedAppt17 = Appointment(appointmentID: "APT-017",
-            scheduledTime: todayAt(11, 0), reasonForVisit: "Vitiligo follow-up", status: "Scheduled")
-        let schedAppt18 = Appointment(appointmentID: "APT-018",
-            scheduledTime: todayAt(13, 0), reasonForVisit: "Full body skin exam", status: "Scheduled")
-        let schedAppt19 = Appointment(appointmentID: "APT-019",
-            scheduledTime: todayAt(13, 30), reasonForVisit: "Eczema flare visit", status: "Scheduled")
-        let schedAppt20 = Appointment(appointmentID: "APT-020",
-            scheduledTime: todayAt(14, 0), reasonForVisit: "Cosmetic: Botox follow-up", status: "Scheduled")
-        let schedAppt21 = Appointment(appointmentID: "APT-021",
-            scheduledTime: todayAt(14, 30), reasonForVisit: "Wound check — excision site", status: "Scheduled")
+            scheduledTime: todayAt(14, 0), reasonForVisit: "New patient: suspicious mole evaluation", status: "Scheduled")
 
-        let schedulePatients = [thomasRandall, margaretLiu, patriciaOkafor, carlosRivera, helenWhitfield,
-                                jamesFoster, jeromeWashington, anikaPatel, williamNakamura, lisaTran, derekSimmons]
-        let scheduleAppts = [schedAppt11, schedAppt12, schedAppt13, schedAppt14, schedAppt15,
-                             schedAppt16, schedAppt17, schedAppt18, schedAppt19, schedAppt20, schedAppt21]
+        let schedulePatients = [thomasRandall, margaretLiu, patriciaOkafor, carlosRivera, helenWhitfield]
+        let scheduleAppts = [schedAppt11, schedAppt12, schedAppt13, schedAppt14, schedAppt15]
 
         // ──────────────────────────────────────────────
         // MARK: – Insert All Entities
@@ -428,12 +402,6 @@ struct ContentView: View {
         patriciaOkafor.appointments = [schedAppt13]
         carlosRivera.appointments = [schedAppt14]
         helenWhitfield.appointments = [schedAppt15]
-        jamesFoster.appointments = [schedAppt16]
-        jeromeWashington.appointments = [schedAppt17]
-        anikaPatel.appointments = [schedAppt18]
-        williamNakamura.appointments = [schedAppt19]
-        lisaTran.appointments = [schedAppt20]
-        derekSimmons.appointments = [schedAppt21]
 
         try? modelContext.save()
     }
@@ -442,13 +410,19 @@ struct ContentView: View {
         let cal = Calendar.current
         let todayBase = cal.startOfDay(for: Date())
 
+        // Only refresh appointments that are "today-slot" appointments (active statuses).
+        // Leave genuinely future appointments (status == "Scheduled" with a future date) alone.
+        let todayStatuses: Set<String> = ["Completed", "Ready for Checkout", "In Exam", "Roomed",
+                                           "Checked In", "Waiting triage", "Confirmed"]
         var movedCount = 0
         for patient in patients {
             for appt in patient.appointments ?? [] {
+                guard !cal.isDateInToday(appt.scheduledTime) else { continue }
+                // Only move appointments whose status implies they were a same-day slot
+                guard todayStatuses.contains(appt.status ?? "") else { continue }
                 let comps = cal.dateComponents([.hour, .minute], from: appt.scheduledTime)
                 if let h = comps.hour, let m = comps.minute,
-                   let fresh = cal.date(bySettingHour: h, minute: m, second: 0, of: todayBase),
-                   !cal.isDateInToday(appt.scheduledTime) {
+                   let fresh = cal.date(bySettingHour: h, minute: m, second: 0, of: todayBase) {
                     appt.scheduledTime = fresh
                     movedCount += 1
                 }
@@ -643,25 +617,13 @@ struct ContentView: View {
             case "APT-011":
                 applyAppointmentMetadata(appointment, encounterType: "Biologic injection", clinicianName: "Dr. Elizabeth Smith, MD", location: "Derm Infusion and Biologic Clinic", durationMinutes: 15, checkInStatus: "Completed", prepInstructions: "Bring injection log.", linkedDiagnoses: ["Plaque Psoriasis"])
             case "APT-012":
-                applyAppointmentMetadata(appointment, encounterType: "Annual skin exam", clinicianName: "Dr. Natalie Jones, MD", location: "Derm Preventive Clinic", durationMinutes: 30, checkInStatus: "Completed", prepInstructions: "Remove nail polish for nail exam.", linkedDiagnoses: ["Skin cancer screening"])
+                applyAppointmentMetadata(appointment, encounterType: "Annual skin exam", clinicianName: "Dr. Natalie Jones, MD", location: "Derm Preventive Clinic", durationMinutes: 30, checkInStatus: "Confirmed", prepInstructions: "Remove nail polish for nail exam.", linkedDiagnoses: ["Skin cancer screening"])
             case "APT-013":
-                applyAppointmentMetadata(appointment, encounterType: "New patient consult", clinicianName: "Dr. Elizabeth Smith, MD", location: "Mohs Surgery Suite", durationMinutes: 45, checkInStatus: "Roomed", prepInstructions: "Bring outside pathology reports.", linkedDiagnoses: ["Basal Cell Carcinoma"])
+                applyAppointmentMetadata(appointment, encounterType: "New patient consult", clinicianName: "Dr. Elizabeth Smith, MD", location: "Mohs Surgery Suite", durationMinutes: 45, checkInStatus: "Checked In", prepInstructions: "Bring outside pathology reports.", linkedDiagnoses: ["Basal Cell Carcinoma"])
             case "APT-014":
-                applyAppointmentMetadata(appointment, encounterType: "Procedure", clinicianName: "Dr. Elizabeth Smith, MD", location: "Derm Procedure Clinic", durationMinutes: 20, checkInStatus: "Checked In", prepInstructions: "No blood thinners for 72 hours prior.", linkedDiagnoses: ["Actinic Keratoses"])
+                applyAppointmentMetadata(appointment, encounterType: "Procedure", clinicianName: "Dr. Elizabeth Smith, MD", location: "Derm Procedure Clinic", durationMinutes: 20, checkInStatus: "Scheduled", prepInstructions: "No blood thinners for 72 hours prior.", linkedDiagnoses: ["Actinic Keratoses"])
             case "APT-015":
-                applyAppointmentMetadata(appointment, encounterType: "Biopsy follow-up", clinicianName: "Dr. Natalie Jones, MD", location: "Derm Suite 3", durationMinutes: 15, checkInStatus: "Confirmed", prepInstructions: "Bring dressing supplies for wound care demo.", linkedDiagnoses: ["Atypical nevus"])
-            case "APT-016":
-                applyAppointmentMetadata(appointment, encounterType: "New patient consult", clinicianName: "Dr. Elizabeth Smith, MD", location: "Pigmented Lesion Clinic", durationMinutes: 30, checkInStatus: "Confirmed", prepInstructions: "Complete new patient forms online before arrival.", linkedDiagnoses: ["Suspicious melanocytic lesion"])
-            case "APT-017":
-                applyAppointmentMetadata(appointment, encounterType: "Follow-up", clinicianName: "Dr. Natalie Jones, MD", location: "Derm Suite 2", durationMinutes: 20, checkInStatus: "Scheduled", prepInstructions: "Photograph any new depigmented patches.", linkedDiagnoses: ["Vitiligo"])
-            case "APT-018":
-                applyAppointmentMetadata(appointment, encounterType: "Annual skin exam", clinicianName: "Dr. Elizabeth Smith, MD", location: "Derm Preventive Clinic", durationMinutes: 30, checkInStatus: "Scheduled", prepInstructions: "Arrive without heavy makeup or nail polish.", linkedDiagnoses: ["Skin cancer screening"])
-            case "APT-019":
-                applyAppointmentMetadata(appointment, encounterType: "Urgent visit", clinicianName: "Dr. Natalie Jones, MD", location: "Rapid Access Derm Clinic", durationMinutes: 20, checkInStatus: "Scheduled", prepInstructions: "Avoid applying topical steroids morning of visit.", linkedDiagnoses: ["Atopic Dermatitis flare"])
-            case "APT-020":
-                applyAppointmentMetadata(appointment, encounterType: "Cosmetic consult", clinicianName: "Dr. Elizabeth Smith, MD", location: "Aesthetic Suite", durationMinutes: 20, checkInStatus: "Scheduled", prepInstructions: "No Advil or fish oil for 1 week prior.", linkedDiagnoses: ["Cosmetic — Botox"])
-            case "APT-021":
-                applyAppointmentMetadata(appointment, encounterType: "Post-op wound check", clinicianName: "Dr. Elizabeth Smith, MD", location: "Derm Procedure Clinic", durationMinutes: 15, checkInStatus: "Scheduled", prepInstructions: "Leave dressing in place; will be removed in office.", linkedDiagnoses: ["Excision site follow-up"])
+                applyAppointmentMetadata(appointment, encounterType: "New patient consult", clinicianName: "Dr. Elizabeth Smith, MD", location: "Pigmented Lesion Clinic", durationMinutes: 30, checkInStatus: "Scheduled", prepInstructions: "Complete new patient forms online before arrival.", linkedDiagnoses: ["Suspicious melanocytic lesion"])
             default:
                 break
             }
