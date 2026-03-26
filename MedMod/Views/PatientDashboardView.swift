@@ -2,54 +2,179 @@ import SwiftUI
 import SwiftData
 
 struct PatientDashboardView: View {
-    @Query(sort: \PatientProfile.lastName) var patients: [PatientProfile]
-    @State private var selectedPatient: PatientProfile?
+    @Query(sort: \PatientProfile.lastName) private var patients: [PatientProfile]
+    @State private var searchText = ""
     private var initialPatient: PatientProfile?
 
     init(patient: PatientProfile? = nil) {
         self.initialPatient = patient
     }
 
-    private var activePatient: PatientProfile? {
-        selectedPatient ?? patients.first
+    private var filteredPatients: [PatientProfile] {
+        guard !searchText.isEmpty else { return patients }
+        let needle = searchText.lowercased()
+        return patients.filter { patient in
+            patient.fullName.lowercased().contains(needle)
+                || patient.medicalRecordNumber.lowercased().contains(needle)
+                || (patient.primaryClinician?.lowercased().contains(needle) ?? false)
+        }
     }
 
     var body: some View {
         NavigationStack {
-            Group {
-                if let patient = activePatient {
-                    patientContent(patient)
-                } else {
-                    ContentUnavailableView("No Patients", systemImage: "person.crop.circle.badge.questionmark", description: Text("Add a patient to get started."))
-                }
-            }
-            .navigationTitle(activePatient?.fullName ?? "Patients")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.large)
-            #endif
-            .toolbar {
-                if patients.count > 1 {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Menu {
-                            ForEach(patients) { p in
-                                Button {
-                                    selectedPatient = p
-                                } label: {
-                                    Label(p.fullName, systemImage: p.id == activePatient?.id ? "checkmark.circle.fill" : "person.crop.circle")
-                                }
-                            }
-                        } label: {
-                            Label("Switch Patient", systemImage: "person.2.circle")
+            if let patient = initialPatient {
+                PatientChartPageView(patient: patient)
+            } else {
+                VStack(spacing: 0) {
+                    // Context bar (mirrors Intelligence/Agenda)
+                    HStack(spacing: 8) {
+                        HStack(spacing: 5) {
+                            Circle()
+                                .fill(patients.isEmpty ? .orange : .green)
+                                .frame(width: 6, height: 6)
+                            Text("\(patients.count) patients on panel")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
                         }
+
+                        Spacer()
+
+                        HStack(spacing: 4) {
+                            Image(systemName: "person.crop.circle.fill")
+                            Text("Panel")
+                                .fontWeight(.medium)
+                        }
+                        .font(.caption)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(.purple.opacity(0.12), in: Capsule())
+                        .foregroundStyle(.purple)
+                    }
+                    .padding(.horizontal)
+                    .padding(.top, 8)
+                    .padding(.bottom, 4)
+
+                    if filteredPatients.isEmpty {
+                        ContentUnavailableView(
+                            "No Patients Found",
+                            systemImage: "person.crop.circle.badge.questionmark",
+                            description: Text(patients.isEmpty ? "Add a patient to get started." : "Try a different name, MRN, or clinician.")
+                        )
+                        .frame(maxHeight: .infinity)
+                    } else {
+                        List(filteredPatients) { patient in
+                            NavigationLink(destination: PatientChartPageView(patient: patient)) {
+                                PatientListRow(patient: patient)
+                            }
+                        }
+                        .listStyle(.insetGrouped)
                     }
                 }
-            }
-            .onAppear {
-                if selectedPatient == nil {
-                    selectedPatient = initialPatient ?? patients.first
-                }
+                .navigationTitle("Patients")
+                #if os(iOS)
+                .navigationBarTitleDisplayMode(.inline)
+                #endif
+                .searchable(text: $searchText, prompt: "Search name, MRN, or clinician")
             }
         }
+    }
+}
+
+private struct PatientListRow: View {
+    let patient: PatientProfile
+
+    private var activeMedCount: Int {
+        (patient.medications ?? []).filter { ($0.status ?? "Active") == "Active" }.count
+    }
+
+    private var nextAppointment: Appointment? {
+        (patient.appointments ?? []).sorted { $0.scheduledTime < $1.scheduledTime }.first
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "person.crop.circle.fill")
+                    .font(.title2)
+                    .foregroundStyle(.purple)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(patient.fullName)
+                        .font(.headline)
+                    Text("MRN \(patient.medicalRecordNumber) • \(patient.age)y • \(patient.gender)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                if patient.isSmoker {
+                    Label("Smoker", systemImage: "smoke")
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                }
+            }
+
+            HStack(spacing: 10) {
+                patientMetric("Records", value: "\(patient.clinicalRecords?.count ?? 0)", color: .blue)
+                patientMetric("Rx", value: "\(activeMedCount)", color: .green)
+                patientMetric("Appts", value: "\(patient.appointments?.count ?? 0)", color: .purple)
+            }
+
+            if let nextAppointment {
+                Text("Next: \(nextAppointment.scheduledTime.formatted(date: .abbreviated, time: .shortened)) • \(nextAppointment.reasonForVisit)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func patientMetric(_ label: String, value: String, color: Color) -> some View {
+        HStack(spacing: 4) {
+            Circle()
+                .fill(color)
+                .frame(width: 6, height: 6)
+            Text("\(label) \(value)")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+struct PatientChartPageView: View {
+    let patient: PatientProfile
+    @State private var selectedSection: ChartSection = .summary
+
+    private enum ChartSection: String, CaseIterable, Identifiable {
+        case summary = "Summary"
+        case visits = "Visits"
+        case medications = "Meds"
+        case imaging = "Imaging"
+        case tools = "Tools"
+
+        var id: String { rawValue }
+    }
+
+    private var sortedRecords: [LocalClinicalRecord] {
+        (patient.clinicalRecords ?? []).sorted { $0.dateRecorded > $1.dateRecorded }
+    }
+
+    private var sortedAppointments: [Appointment] {
+        (patient.appointments ?? []).sorted { $0.scheduledTime < $1.scheduledTime }
+    }
+
+    private var sortedMedications: [LocalMedication] {
+        (patient.medications ?? []).sorted { $0.writtenDate > $1.writtenDate }
+    }
+
+    private var activeMedications: [LocalMedication] {
+        sortedMedications.filter { ($0.status ?? "Active") == "Active" }
+    }
+
+    private var nextAppointment: Appointment? {
+        sortedAppointments.first { $0.scheduledTime >= Date() }
     }
 
     // MARK: - Patient Content
@@ -109,41 +234,197 @@ struct PatientDashboardView: View {
         return alerts
     }
 
-    @ViewBuilder
-    private func patientContent(_ patient: PatientProfile) -> some View {
+    var body: some View {
         ScrollView {
             VStack(spacing: 16) {
-                // Header card
                 patientHeader(patient)
-
-                // CDS Alerts (smart clinical decision support)
-                let cdsAlerts = clinicalAlerts(for: patient)
-                if !cdsAlerts.isEmpty {
-                    cdsAlertsCard(cdsAlerts)
-                }
-
-                // Basic alerts: allergies + risk flags
-                if !patient.allergies.isEmpty || !patient.riskFlags.isEmpty {
-                    alertsCard(patient)
-                }
-
-                // Key metrics
-                metricsRow(patient)
-
-                // Care plan
-                if let plan = patient.carePlanSummary, !plan.isEmpty {
-                    carePlanCard(plan)
-                }
-
-                // Chart navigation
-                chartLinksCard(patient)
-
-                // Clinical AI
-                aiLinksCard(patient)
+                chartSectionPicker
+                sectionContent
             }
             .padding()
         }
         .background(Color(.systemGroupedBackground))
+        .navigationTitle(patient.fullName)
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
+    }
+
+    private var chartSectionPicker: some View {
+        Picker("Chart Section", selection: $selectedSection) {
+            ForEach(ChartSection.allCases) { section in
+                Text(section.rawValue).tag(section)
+            }
+        }
+        .pickerStyle(.segmented)
+    }
+
+    @ViewBuilder
+    private var sectionContent: some View {
+        switch selectedSection {
+        case .summary:
+            summarySection
+        case .visits:
+            visitsSection
+        case .medications:
+            medicationsSection
+        case .imaging:
+            imagingSection
+        case .tools:
+            toolsSection
+        }
+    }
+
+    private var summarySection: some View {
+        VStack(spacing: 16) {
+            metricsRow(patient)
+
+            if let appointment = nextAppointment {
+                infoCard(title: "Next Appointment", systemImage: "calendar.badge.clock", tint: .purple) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(appointment.reasonForVisit)
+                            .font(.subheadline.weight(.semibold))
+                        Text("\(appointment.scheduledTime.formatted(date: .abbreviated, time: .shortened)) • \(appointment.status)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        if let clinician = appointment.clinicianName {
+                            Text("Clinician: \(clinician)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+
+            let cdsAlerts = clinicalAlerts(for: patient)
+            if !cdsAlerts.isEmpty {
+                cdsAlertsCard(cdsAlerts)
+            }
+
+            if !patient.allergies.isEmpty || !patient.riskFlags.isEmpty {
+                alertsCard(patient)
+            }
+
+            if let plan = patient.carePlanSummary, !plan.isEmpty {
+                carePlanCard(plan)
+            }
+
+            infoCard(title: "Chart Overview", systemImage: "list.bullet.rectangle", tint: .blue) {
+                VStack(spacing: 0) {
+                    NavigationLink(destination: VisitHistoryView(patient: patient)) {
+                        chartRow(label: "Visit Timeline", icon: "bed.double", color: .blue)
+                    }
+                    Divider().padding(.leading, 44)
+                    NavigationLink(destination: ChartNotesView(patient: patient)) {
+                        chartRow(label: "Structured Notes", icon: "folder", color: .indigo)
+                    }
+                    Divider().padding(.leading, 44)
+                    NavigationLink(destination: RxListView(patient: patient)) {
+                        chartRow(label: "Medication List", icon: "pills", color: .green)
+                    }
+                }
+            }
+        }
+    }
+
+    private var visitsSection: some View {
+        VStack(spacing: 16) {
+            infoCard(title: "Recent Visits", systemImage: "clock.arrow.circlepath", tint: .blue) {
+                if sortedRecords.isEmpty {
+                    emptyStateRow("No documented visits")
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(Array(sortedRecords.prefix(5).enumerated()), id: \.element.id) { index, record in
+                            visitPreviewRow(record)
+                            if index < min(sortedRecords.count, 5) - 1 {
+                                Divider().padding(.leading, 44)
+                            }
+                        }
+                    }
+                }
+            }
+
+            infoCard(title: "Chart Actions", systemImage: "doc.text.magnifyingglass", tint: .indigo) {
+                VStack(spacing: 0) {
+                    NavigationLink(destination: VisitHistoryView(patient: patient)) {
+                        chartRow(label: "Open Full Visit History", icon: "bed.double", color: .blue)
+                    }
+                    Divider().padding(.leading, 44)
+                    NavigationLink(destination: ChartNotesView(patient: patient)) {
+                        chartRow(label: "Review Chart Notes", icon: "folder", color: .indigo)
+                    }
+                }
+            }
+        }
+    }
+
+    private var medicationsSection: some View {
+        VStack(spacing: 16) {
+            infoCard(title: "Active Medications", systemImage: "pills.fill", tint: .green) {
+                if activeMedications.isEmpty {
+                    emptyStateRow("No active medications on file")
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(Array(activeMedications.prefix(6).enumerated()), id: \.element.id) { index, medication in
+                            medicationPreviewRow(medication)
+                            if index < min(activeMedications.count, 6) - 1 {
+                                Divider().padding(.leading, 44)
+                            }
+                        }
+                    }
+                }
+            }
+
+            infoCard(title: "Medication Workflow", systemImage: "cross.case", tint: .green) {
+                NavigationLink(destination: RxListView(patient: patient)) {
+                    chartRow(label: "Open Medication Workspace", icon: "pills", color: .green)
+                }
+            }
+        }
+    }
+
+    private var imagingSection: some View {
+        VStack(spacing: 16) {
+            infoCard(title: "Clinical Imaging", systemImage: "camera.viewfinder", tint: .orange) {
+                VStack(spacing: 0) {
+                    NavigationLink(destination: ClinicalPhotoView(patient: patient)) {
+                        chartRow(label: "Clinical Photos", icon: "camera.fill", color: .orange)
+                    }
+                    Divider().padding(.leading, 44)
+                    NavigationLink(destination: LesionTrackingView(patient: patient)) {
+                        chartRow(label: "Lesion Tracking", icon: "chart.line.uptrend.xyaxis", color: .teal)
+                    }
+                    Divider().padding(.leading, 44)
+                    NavigationLink(destination: AnatomicalRealityView(patient: patient)) {
+                        chartRow(label: "Body Map", icon: "figure.stand", color: .red)
+                    }
+                }
+            }
+        }
+    }
+
+    private var toolsSection: some View {
+        VStack(spacing: 16) {
+            infoCard(title: "Clinical Tools", systemImage: "stethoscope", tint: .purple) {
+                VStack(spacing: 0) {
+                    NavigationLink(destination: ClinicalExamView(patient: patient)) {
+                        chartRow(label: "Clinical Exam Workspace", icon: "waveform.path.ecg.rectangle", color: .purple)
+                    }
+                    Divider().padding(.leading, 44)
+                    NavigationLink(destination: ClinicIntelligenceView(patient: patient)) {
+                        chartRow(label: "Clinical Intelligence", icon: "brain.head.profile", color: .blue)
+                    }
+                }
+            }
+
+            infoCard(title: "Use Cases", systemImage: "lightbulb", tint: .secondary) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Use intelligence when you need synthesis across chart history, medications, and upcoming care. Default chart review should still begin in Visits and Medications.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
     }
 
     // MARK: - Header
@@ -152,14 +433,14 @@ struct PatientDashboardView: View {
         VStack(spacing: 12) {
             HStack(spacing: 14) {
                 Image(systemName: "person.crop.circle.fill")
-                    .font(.system(size: 48))
+                    .font(.system(size: 38))
                     .foregroundColor(.purple)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(patient.fullName)
-                        .font(.title2.bold())
+                        .font(.title3.bold())
                     Text("\(patient.gender) · Age \(patient.age) · DOB \(patient.dateOfBirth.formatted(date: .abbreviated, time: .omitted))")
-                        .font(.subheadline)
+                        .font(.caption)
                         .foregroundColor(.secondary)
                 }
                 Spacer()
@@ -183,7 +464,7 @@ struct PatientDashboardView: View {
             }
         }
         .padding()
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+        .background(chartPanelBackground)
     }
 
     private func detailLabel(_ label: String, value: String) -> some View {
@@ -220,7 +501,7 @@ struct PatientDashboardView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
-        .background(.red.opacity(0.06), in: RoundedRectangle(cornerRadius: 14))
+        .background(alertPanelBackground)
     }
 
     // MARK: - Alerts
@@ -240,7 +521,7 @@ struct PatientDashboardView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
-        .background(.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
+        .background(warningPanelBackground)
     }
 
     // MARK: - Metrics
@@ -248,9 +529,82 @@ struct PatientDashboardView: View {
     private func metricsRow(_ patient: PatientProfile) -> some View {
         HStack(spacing: 12) {
             metricTile(label: "Records", value: "\(patient.clinicalRecords?.count ?? 0)", icon: "doc.text", color: .blue)
-            metricTile(label: "Active Rx", value: "\(patient.medications?.count ?? 0)", icon: "pills", color: .green)
+            metricTile(label: "Active Rx", value: "\(activeMedications.count)", icon: "pills", color: .green)
             metricTile(label: "Appointments", value: "\(patient.appointments?.count ?? 0)", icon: "calendar", color: .purple)
         }
+    }
+
+    private func infoCard<Content: View>(title: String, systemImage: String, tint: Color, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(title, systemImage: systemImage)
+                .font(.subheadline.bold())
+                .foregroundStyle(tint)
+            content()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(chartPanelBackground)
+    }
+
+    private func emptyStateRow(_ text: String) -> some View {
+        Text(text)
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 4)
+    }
+
+    private func visitPreviewRow(_ record: LocalClinicalRecord) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "doc.text")
+                .foregroundStyle(.blue)
+                .frame(width: 28)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(record.conditionName)
+                    .font(.subheadline.weight(.semibold))
+                Text(record.dateRecorded.formatted(date: .abbreviated, time: .omitted))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if let visitType = record.visitType {
+                    Text(visitType)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                if let followUp = record.followUpPlan, !followUp.isEmpty {
+                    Text("Follow-up: \(followUp)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+            }
+            Spacer()
+        }
+        .padding(.vertical, 6)
+    }
+
+    private func medicationPreviewRow(_ medication: LocalMedication) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "pills.fill")
+                .foregroundStyle(.green)
+                .frame(width: 28)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(medication.medicationName)
+                    .font(.subheadline.weight(.semibold))
+                Text([medication.dose, medication.route, medication.frequency]
+                    .compactMap { $0 }
+                    .filter { !$0.isEmpty }
+                    .joined(separator: " • "))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if let indication = medication.indication, !indication.isEmpty {
+                    Text(indication)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+        }
+        .padding(.vertical, 6)
     }
 
     private func metricTile(label: String, value: String, icon: String, color: Color) -> some View {
@@ -266,7 +620,7 @@ struct PatientDashboardView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 12)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .background(chartMetricBackground)
     }
 
     // MARK: - Care Plan
@@ -281,30 +635,7 @@ struct PatientDashboardView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
-    }
-
-    // MARK: - Chart Links
-
-    private func chartLinksCard(_ patient: PatientProfile) -> some View {
-        VStack(spacing: 0) {
-            NavigationLink(destination: VisitHistoryView(patient: patient)) {
-                chartRow(label: "Visit History", icon: "bed.double", color: .blue)
-            }
-            Divider().padding(.leading, 44)
-            NavigationLink(destination: ChartNotesView(patient: patient)) {
-                chartRow(label: "Chart Notes", icon: "folder", color: .indigo)
-            }
-            Divider().padding(.leading, 44)
-            NavigationLink(destination: RxListView(patient: patient)) {
-                chartRow(label: "Medications", icon: "pills", color: .green)
-            }
-            Divider().padding(.leading, 44)
-            NavigationLink(destination: ClinicalPhotoView(patient: patient)) {
-                chartRow(label: "Clinical Photos", icon: "camera.fill", color: .orange)
-            }
-        }
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+        .background(chartPanelBackground)
     }
 
     private func chartRow(label: String, icon: String, color: Color) -> some View {
@@ -325,26 +656,39 @@ struct PatientDashboardView: View {
         .padding(.vertical, 12)
     }
 
-    // MARK: - AI Links
+    private var chartPanelBackground: some View {
+        RoundedRectangle(cornerRadius: 10)
+            .fill(Color(.secondarySystemGroupedBackground))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
+            )
+    }
 
-    private func aiLinksCard(_ patient: PatientProfile) -> some View {
-        VStack(spacing: 0) {
-            NavigationLink(destination: ClinicalExamView(patient: patient)) {
-                chartRow(label: "3D Clinical Exam", icon: "waveform.path.ecg.rectangle", color: .purple)
-            }
-            Divider().padding(.leading, 44)
-            NavigationLink(destination: ClinicIntelligenceView(patient: patient)) {
-                chartRow(label: "AI Assistant", icon: "brain.head.profile", color: .blue)
-            }
-            Divider().padding(.leading, 44)
-            NavigationLink(destination: LesionTrackingView(patient: patient)) {
-                chartRow(label: "Lesion Tracking", icon: "chart.line.uptrend.xyaxis", color: .teal)
-            }
-            Divider().padding(.leading, 44)
-            NavigationLink(destination: AnatomicalRealityView(patient: patient)) {
-                chartRow(label: "Body Map", icon: "figure.stand", color: .red)
-            }
-        }
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+    private var chartMetricBackground: some View {
+        RoundedRectangle(cornerRadius: 10)
+            .fill(Color(.tertiarySystemGroupedBackground))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .strokeBorder(Color.primary.opacity(0.05), lineWidth: 1)
+            )
+    }
+
+    private var alertPanelBackground: some View {
+        RoundedRectangle(cornerRadius: 10)
+            .fill(Color.red.opacity(0.05))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .strokeBorder(Color.red.opacity(0.10), lineWidth: 1)
+            )
+    }
+
+    private var warningPanelBackground: some View {
+        RoundedRectangle(cornerRadius: 10)
+            .fill(Color.orange.opacity(0.05))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .strokeBorder(Color.orange.opacity(0.12), lineWidth: 1)
+            )
     }
 }
