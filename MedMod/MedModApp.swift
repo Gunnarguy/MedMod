@@ -24,6 +24,20 @@ struct MedModApp: App {
         ])
         let config = ModelConfiguration(schema: schema)
 
+        // Force a one-time wipe to eradicate legacy HealthKit duplicates that persisted
+        // in developers' simulators from older versions.
+        let ud = UserDefaults.standard
+        if !ud.bool(forKey: "didClearLegacyDataV1") {
+            AppLogger.app.info("🧹 Performing one-time wipe of legacy SwiftData store to clear HealthKit duplicates...")
+            let url = config.url
+            let fm = FileManager.default
+            for suffix in ["", "-wal", "-shm"] {
+                try? fm.removeItem(at: suffix.isEmpty ? url : URL(fileURLWithPath: url.path + suffix))
+            }
+            ud.set(true, forKey: "didClearLegacyDataV1")
+            AppLogger.app.info("✅ Legacy store wiped. Fresh DB will be created.")
+        }
+
         do {
             container = try ModelContainer(for: schema, configurations: [config])
             AppLogger.app.info("✅ ModelContainer created successfully")

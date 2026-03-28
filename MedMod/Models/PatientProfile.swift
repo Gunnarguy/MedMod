@@ -19,10 +19,10 @@ final class PatientProfile {
     var emergencyContactPhone: String?
     var bloodType: String?
 
-    @Relationship(deleteRule: .cascade) var clinicalRecords: [LocalClinicalRecord]?
-    @Relationship(deleteRule: .cascade) var medications: [LocalMedication]?
-    @Relationship(deleteRule: .cascade) var appointments: [Appointment]?
-    @Relationship(deleteRule: .cascade) var clinicalPhotos: [ClinicalPhoto]?
+    @Relationship(deleteRule: .cascade, inverse: \LocalClinicalRecord.patient) var clinicalRecords: [LocalClinicalRecord]?
+    @Relationship(deleteRule: .cascade, inverse: \LocalMedication.patient) var medications: [LocalMedication]?
+    @Relationship(deleteRule: .cascade, inverse: \Appointment.patient) var appointments: [Appointment]?
+    @Relationship(deleteRule: .cascade, inverse: \ClinicalPhoto.patient) var clinicalPhotos: [ClinicalPhoto]?
 
     init(
         id: UUID = UUID(),

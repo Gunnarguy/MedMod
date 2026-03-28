@@ -37,8 +37,8 @@ enum AppLogger {
     /// Agenda, swipe actions, schedule computation
     nonisolated static let agenda    = Logger(subsystem: subsystem, category: "Agenda")
 
-    /// HealthKit / FHIR
-    nonisolated static let health    = Logger(subsystem: subsystem, category: "HealthKit")
+    /// Clinical records
+    nonisolated static let clinical  = Logger(subsystem: subsystem, category: "Clinical")
 
     /// Clinic Intelligence cross-patient panel
     nonisolated static let intel     = Logger(subsystem: subsystem, category: "Intel")

@@ -28,7 +28,7 @@ struct RxListView: View {
                     ContentUnavailableView(
                         "No Medications",
                         systemImage: "pills",
-                        description: Text("Import clinical records via HealthKit or add medications through the exam workflow.")
+                        description: Text("Add medications through the exam workflow.")
                     )
                 } else {
                     ForEach(filteredMedications) { rx in
@@ -43,7 +43,7 @@ struct RxListView: View {
                 HStack {
                     Image(systemName: "info.circle")
                         .foregroundColor(.blue)
-                    Text("Rx data sourced from local FHIR MedicationRequest records via HealthKit. Data never leaves this device.")
+                    Text("Rx data is sourced from local clinical records. Data never leaves this device.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }

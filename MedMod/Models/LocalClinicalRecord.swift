@@ -24,6 +24,7 @@ final class LocalClinicalRecord {
     var carePlanSummary: String?
     var icd10Code: String?
     var clinicalPhotoPaths: [String]?
+    var patient: PatientProfile?
 
     init(recordID: String, dateRecorded: Date, conditionName: String, status: String, isHiddenFromPortal: Bool = false,
          visitType: String? = nil, severity: String? = nil,

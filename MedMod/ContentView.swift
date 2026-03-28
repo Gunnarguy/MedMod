@@ -27,6 +27,10 @@ struct ContentView: View {
         func todayAt(_ h: Int, _ m: Int) -> Date {
             cal.date(bySettingHour: h, minute: m, second: 0, of: todayBase)!
         }
+        func futureAt(_ days: Int, _ h: Int, _ m: Int) -> Date {
+            let target = cal.date(byAdding: .day, value: days, to: todayBase)!
+            return cal.date(bySettingHour: h, minute: m, second: 0, of: target)!
+        }
 
         // ──────────────────────────────────────────────
         // MARK: – Patients
@@ -100,7 +104,7 @@ struct ContentView: View {
             scheduledTime: todayAt(8, 30),
             reasonForVisit: "Post-cryo AK follow-up", status: "Ready for Checkout")
         let janeAppt2 = Appointment(appointmentID: "APT-002",
-            scheduledTime: Date().addingTimeInterval(86400 * 365),
+            scheduledTime: futureAt(365, 10, 0),
             reasonForVisit: "Annual skin exam", status: "Scheduled")
 
         // ──────────────────────────────────────────────
@@ -144,7 +148,7 @@ struct ContentView: View {
             scheduledTime: todayAt(9, 30),
             reasonForVisit: "Acne/rosacea follow-up", status: "Checked In")
         let mariaAppt2 = Appointment(appointmentID: "APT-004",
-            scheduledTime: Date().addingTimeInterval(86400 * 42),
+            scheduledTime: futureAt(42, 11, 15),
             reasonForVisit: "Rosacea 6-week check", status: "Scheduled")
 
         // ──────────────────────────────────────────────
@@ -197,7 +201,7 @@ struct ContentView: View {
             scheduledTime: todayAt(8, 15),
             reasonForVisit: "Psoriasis — methotrexate labs review", status: "Completed")
         let robertAppt2 = Appointment(appointmentID: "APT-006",
-            scheduledTime: Date().addingTimeInterval(86400 * 180),
+            scheduledTime: futureAt(180, 14, 30),
             reasonForVisit: "6-month melanoma surveillance", status: "Scheduled")
 
         // ──────────────────────────────────────────────
@@ -244,7 +248,7 @@ struct ContentView: View {
             scheduledTime: todayAt(8, 45),
             reasonForVisit: "Dupilumab injection + 8-week check", status: "In Exam")
         let sarahAppt2 = Appointment(appointmentID: "APT-008",
-            scheduledTime: Date().addingTimeInterval(86400 * 14),
+            scheduledTime: futureAt(14, 9, 30),
             reasonForVisit: "Patch testing — nickel panel", status: "Scheduled")
 
         // ──────────────────────────────────────────────
@@ -293,7 +297,7 @@ struct ContentView: View {
             providerSignature: "Dr. Smith, MD")
 
         let davidAppt1 = Appointment(appointmentID: "APT-009",
-            scheduledTime: Date().addingTimeInterval(86400 * 7),
+            scheduledTime: futureAt(7, 15, 0),
             reasonForVisit: "Wart cryo retreatment + rosacea check", status: "Scheduled")
         let davidAppt2 = Appointment(appointmentID: "APT-010",
             scheduledTime: todayAt(9, 0),
@@ -408,27 +412,93 @@ struct ContentView: View {
 
     private func refreshSupplementalDemoData() {
         let cal = Calendar.current
-        let todayBase = cal.startOfDay(for: Date())
+        let now = Date()
+        let todayBase = cal.startOfDay(for: now)
 
-        // Only refresh appointments that are "today-slot" appointments (active statuses).
-        // Leave genuinely future appointments (status == "Scheduled" with a future date) alone.
-        let todayStatuses: Set<String> = ["Completed", "Ready for Checkout", "In Exam", "Roomed",
-                                           "Checked In", "Waiting triage", "Confirmed"]
+        // Clinicians expect schedules to be exactly on the 10, 15, 20, or 30-minute marks.
+        // We establish a "demo anchor time" that mimics the exact moment the clinician is
+        // viewing their schedule during an active clinic day.
+        var anchorHour = cal.component(.hour, from: now)
+        // Clamp the hour to mid-day (10 AM to 2 PM) so looking forwards/backwards 2 hours
+        // always stays within 8 AM - 5 PM clinic hours perfectly.
+        if anchorHour < 10 || anchorHour >= 15 {
+            anchorHour = 14
+        }
+
+        let currentMinute = cal.component(.minute, from: now)
+        // Round to nearest 15-minute block (0, 15, 30, or 45)
+        let roundedMinute = (currentMinute / 15) * 15
+
+        let demoAnchorTime = cal.date(bySettingHour: anchorHour, minute: roundedMinute, second: 0, of: todayBase) ?? now
+
+        // Align patient slots to strict 15 or 30-minute intervals.
+        // This stops the schedule from having random slots like 9:03 AM and 9:33 AM.
+        let dynamicTodayOffsets: [String: (offsetMinutes: Int, targetStatus: String)] = [
+            "APT-011": (-120, "Completed"),            // 2 hours ago
+            "APT-005": (-90, "Completed"),             // 1.5 hours ago
+            "APT-001": (-60, "Ready for Checkout"),    // 1 hour ago
+            "APT-007": (-30, "In Exam"),               // 30 mins ago
+            "APT-010": (-15, "In Exam"),               // Squeezed-in urgent visit (15 mins ago)
+            "APT-003": (0, "Roomed"),                  // Appointment happening right now!
+            "APT-012": (30, "Checked In"),             // In waiting room for 30 mins from now
+            "APT-013": (60, "Confirmed"),              // In 1 hour
+            "APT-014": (120, "Scheduled"),             // In 2 hours
+            "APT-015": (150, "Scheduled"),             // In 2.5 hours
+        ]
+
         var movedCount = 0
+        var fixedFutureCount = 0
         for patient in patients {
             for appt in patient.appointments ?? [] {
-                guard !cal.isDateInToday(appt.scheduledTime) else { continue }
-                // Only move appointments whose status implies they were a same-day slot
-                guard todayStatuses.contains(appt.status ?? "") else { continue }
-                let comps = cal.dateComponents([.hour, .minute], from: appt.scheduledTime)
-                if let h = comps.hour, let m = comps.minute,
-                   let fresh = cal.date(bySettingHour: h, minute: m, second: 0, of: todayBase) {
-                    appt.scheduledTime = fresh
+                if let dynamic = dynamicTodayOffsets[appt.appointmentID] {
+                    // Update the time relative to the anchored demo time
+                    let newDate = cal.date(byAdding: .minute, value: dynamic.offsetMinutes, to: demoAnchorTime)!
+                    appt.scheduledTime = newDate
+                    appt.status = dynamic.targetStatus
                     movedCount += 1
+                } else {
+                    // These are expected to be FUTURE or PAST appointments not on today's strict agenda.
+                    // If they slipped into the past or are at weird hours (like 10 PM), reset them safely.
+                    if appt.status == "Scheduled" {
+                        let comps = cal.dateComponents([.hour], from: appt.scheduledTime)
+                        let isWeirdHour = (comps.hour ?? 0) >= 17 || (comps.hour ?? 0) < 7
+                        let isPast = appt.scheduledTime < now
+
+                        if isPast || isWeirdHour {
+                            // Push them 7 to 30 days out at a normal clinical time
+                            let daysOut = Int.random(in: 7...30)
+                            if let fresh = cal.date(byAdding: .day, value: daysOut, to: todayBase),
+                               let cleanTime = cal.date(bySettingHour: [9, 10, 11, 14, 15].randomElement()!, minute: [0, 15, 30].randomElement()!, second: 0, of: fresh) {
+                                appt.scheduledTime = cleanTime
+                                fixedFutureCount += 1
+                            }
+                        }
+                    }
                 }
             }
         }
-        AppLogger.data.info("🔄 Refreshed appointments: \(movedCount) moved to today")
+        AppLogger.data.info("🔄 Refreshed appts for rolling timeline: \(movedCount) moved dynamic, \(fixedFutureCount) future fixed")
+
+        // --- CLEANUP LEGACY HEALTHKIT DUPLICATES ---
+        // Ensure any duplicated data from previous builds using the now-removed HealthKit fallback is wiped out permanently.
+        do {
+            let allMeds = try modelContext.fetch(FetchDescriptor<LocalMedication>())
+            let medsToDelete = allMeds.filter { ($0.pharmacyName ?? "").contains("HealthKit") }
+            for med in medsToDelete {
+                modelContext.delete(med)
+            }
+
+            let allRecords = try modelContext.fetch(FetchDescriptor<LocalClinicalRecord>())
+            let recordsToDelete = allRecords.filter { ($0.carePlanSummary ?? "").contains("HealthKit") || ($0.conditionName).contains("HealthKit") }
+            for rec in recordsToDelete {
+                modelContext.delete(rec)
+            }
+            if !medsToDelete.isEmpty || !recordsToDelete.isEmpty {
+                AppLogger.data.info("🗑️ Cleaned up \(medsToDelete.count) duplicated HealthKit meds and \(recordsToDelete.count) records")
+            }
+        } catch {
+            AppLogger.data.error("Error cleaning up HealthKit duplicates: \(error.localizedDescription)")
+        }
 
         let medications = patients.flatMap { $0.medications ?? [] }
         let records = patients.flatMap { $0.clinicalRecords ?? [] }

@@ -10,7 +10,7 @@ final class ClinicalPhoto {
     var filePath: String
     var linkedRecordID: String?
 
-    @Relationship(inverse: \PatientProfile.clinicalPhotos) var patient: PatientProfile?
+    var patient: PatientProfile?
 
     init(
         id: UUID = UUID(),

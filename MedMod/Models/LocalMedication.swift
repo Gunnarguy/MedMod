@@ -20,6 +20,7 @@ final class LocalMedication {
     var nextRefillEligibleDate: Date?
     var pharmacyName: String?
     var safetyNotes: [String]?
+    var patient: PatientProfile?
 
     init(
         rxID: String,

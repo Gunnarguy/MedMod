@@ -688,9 +688,7 @@ final class ClinicalIntelligenceService: ObservableObject {
         if normalizedQuery.contains("medication") || normalizedQuery.contains("prescription") || normalizedQuery.contains("rx") || normalizedQuery.contains("refill") {
             let medications = try ClinicalChartFormatter.medications(modelContext: modelContext, patient: patient)
             if medications.isEmpty {
-                await HealthKitFHIRService(modelContext: modelContext, patient: patient).requestAuthorizationAndFetch()
-                let refreshed = try ClinicalChartFormatter.medications(modelContext: modelContext, patient: patient)
-                return refreshed.isEmpty ? "No medications are currently on file for this patient." : ClinicalChartFormatter.medicationSummary(medications: refreshed)
+                return "No medications are currently on file for this patient."
             }
             return ClinicalChartFormatter.medicationSummary(medications: medications)
         }

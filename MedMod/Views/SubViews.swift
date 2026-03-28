@@ -32,15 +32,44 @@ struct AgendaView: View {
         "Checked In", "Waiting triage", "Confirmed", "Scheduled"
     ]
 
-    private var groupedByStatus: [(status: String, items: [(patient: PatientProfile, appointment: Appointment)])] {
-        var dict: [String: [(PatientProfile, Appointment)]] = [:]
-        for pair in filteredSchedule {
-            dict[pair.appointment.status, default: []].append((pair.patient, pair.appointment))
+    struct AgendaChronologicalGroup: Identifiable {
+        let title: String
+        let items: [AgendaChronologicalItem]
+        var id: String { title }
+    }
+
+    struct AgendaChronologicalItem: Identifiable {
+        let patient: PatientProfile
+        let appointment: Appointment
+        var id: String { appointment.appointmentID }
+    }
+
+    private var chronologicalGroups: [AgendaChronologicalGroup] {
+        let sorted = filteredSchedule.sorted { $0.appointment.scheduledTime < $1.appointment.scheduledTime }
+
+        let calendar = Calendar.current
+        var morning: [AgendaChronologicalItem] = []
+        var afternoon: [AgendaChronologicalItem] = []
+        var evening: [AgendaChronologicalItem] = []
+
+        for pair in sorted {
+            let item = AgendaChronologicalItem(patient: pair.patient, appointment: pair.appointment)
+            let hour = calendar.component(.hour, from: pair.appointment.scheduledTime)
+            if hour < 12 {
+                morning.append(item)
+            } else if hour < 17 {
+                afternoon.append(item)
+            } else {
+                evening.append(item)
+            }
         }
-        return Self.workflowOrder.compactMap { status in
-            guard let items = dict[status], !items.isEmpty else { return nil }
-            return (status, items)
-        }
+
+        var groups: [AgendaChronologicalGroup] = []
+        if !morning.isEmpty { groups.append(AgendaChronologicalGroup(title: "☀️ Morning", items: morning)) }
+        if !afternoon.isEmpty { groups.append(AgendaChronologicalGroup(title: "🌤 Afternoon", items: afternoon)) }
+        if !evening.isEmpty { groups.append(AgendaChronologicalGroup(title: "🌙 Evening", items: evening)) }
+
+        return groups
     }
 
     private var statsCompleted: Int { todaySchedule.filter { $0.appointment.status == "Completed" }.count }
@@ -192,17 +221,17 @@ struct AgendaView: View {
                         .listRowBackground(Color.clear)
                     }
 
-                    ForEach(groupedByStatus, id: \.status) { group in
+                    ForEach(chronologicalGroups) { group in
                         Section {
-                            ForEach(group.items, id: \.appointment.id) { pair in
-                                NavigationLink(destination: PatientDashboardView(patient: pair.patient)) {
-                                    AgendaRow(patient: pair.patient, appointment: pair.appointment)
+                            ForEach(group.items) { item in
+                                NavigationLink(destination: PatientDashboardView(patient: item.patient)) {
+                                    AgendaRow(patient: item.patient, appointment: item.appointment)
                                 }
                                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                    if let next = Self.nextStatus(after: pair.appointment.status) {
+                                    if let next = Self.nextStatus(after: item.appointment.status) {
                                         Button {
-                                            AppLogger.agenda.info("➡️ Swipe advance: \(pair.patient.fullName) \(pair.appointment.status) → \(next)")
-                                            withAnimation { pair.appointment.status = next }
+                                            AppLogger.agenda.info("➡️ Swipe advance: \(item.patient.fullName) \(item.appointment.status) → \(next)")
+                                            withAnimation { item.appointment.status = next }
                                         } label: {
                                             Label(next, systemImage: "chevron.right.circle.fill")
                                         }
@@ -210,10 +239,10 @@ struct AgendaView: View {
                                     }
                                 }
                                 .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                                    if let prev = Self.previousStatus(before: pair.appointment.status) {
+                                    if let prev = Self.previousStatus(before: item.appointment.status) {
                                         Button {
-                                            AppLogger.agenda.info("⬅️ Swipe regress: \(pair.patient.fullName) \(pair.appointment.status) → \(prev)")
-                                            withAnimation { pair.appointment.status = prev }
+                                            AppLogger.agenda.info("⬅️ Swipe regress: \(item.patient.fullName) \(item.appointment.status) → \(prev)")
+                                            withAnimation { item.appointment.status = prev }
                                         } label: {
                                             Label(prev, systemImage: "chevron.left.circle.fill")
                                         }
@@ -223,10 +252,7 @@ struct AgendaView: View {
                             }
                         } header: {
                             HStack(spacing: 6) {
-                                Circle()
-                                    .fill(Self.workflowColor(for: group.status))
-                                    .frame(width: 8, height: 8)
-                                Text(group.status.uppercased())
+                                Text(group.title.uppercased())
                                     .font(.caption.weight(.semibold))
                                     .foregroundStyle(.secondary)
                                 Spacer()
@@ -234,8 +260,8 @@ struct AgendaView: View {
                                     .font(.caption2.weight(.medium).monospacedDigit())
                                     .padding(.horizontal, 6)
                                     .padding(.vertical, 2)
-                                    .background(Self.workflowColor(for: group.status).opacity(0.12), in: Capsule())
-                                    .foregroundStyle(Self.workflowColor(for: group.status))
+                                    .background(Color.secondary.opacity(0.12), in: Capsule())
+                                    .foregroundStyle(.secondary)
                             }
                         }
                     }

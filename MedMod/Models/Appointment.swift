@@ -14,6 +14,7 @@ final class Appointment {
     var checkInStatus: String?
     var prepInstructions: String?
     var linkedDiagnoses: [String]?
+    var patient: PatientProfile?
 
     init(
         appointmentID: String,
