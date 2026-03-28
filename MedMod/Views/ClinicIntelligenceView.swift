@@ -191,20 +191,28 @@ struct ClinicIntelligenceView: View {
                 }
 
                 // Input bar
-                HStack(spacing: 8) {
-                    TextField(selectedPatient == nil ? "Ask about your patient panel…" : "Ask about \(selectedPatient!.firstName)…", text: $queryText)
-                        .textFieldStyle(.roundedBorder)
-                        .onSubmit { sendMessage(queryText) }
+                VStack(spacing: 0) {
+                    Divider()
+                    HStack(spacing: 12) {
+                        TextField(selectedPatient == nil ? "Ask about your patient panel…" : "Ask about \(selectedPatient!.firstName)…", text: $queryText)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(Color(UIColor.secondarySystemBackground).opacity(0.8))
+                            .clipShape(Capsule())
+                            .onSubmit { sendMessage(queryText) }
 
-                    Button(action: { sendMessage(queryText) }) {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .font(.title2)
-                            .foregroundColor(.purple)
+                        Button(action: { sendMessage(queryText) }) {
+                            Image(systemName: "arrow.up.circle.fill")
+                                .font(.system(size: 28))
+                                .symbolRenderingMode(.hierarchical)
+                                .foregroundColor(queryText.isEmpty ? .secondary.opacity(0.5) : .purple)
+                        }
+                        .disabled(queryText.isEmpty || isProcessing)
                     }
-                    .disabled(queryText.isEmpty || isProcessing)
+                    .padding(.horizontal)
+                    .padding(.vertical, 12)
+                    .background(.ultraThinMaterial)
                 }
-                .padding(.horizontal)
-                .padding(.vertical, 8)
             }
             .navigationTitle("Clinical Intelligence")
             #if os(iOS)
@@ -309,16 +317,64 @@ private struct UserBubble: View {
     let text: String
 
     var body: some View {
-        HStack {
+        HStack(alignment: .bottom, spacing: 8) {
             Spacer(minLength: 60)
             Text(text)
-                .padding(10)
+                .font(.subheadline)
+                .lineSpacing(2)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
                 .background(Color.purple)
                 .foregroundColor(.white)
-                .cornerRadius(14)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .textSelection(.enabled)
         }
         .padding(.horizontal)
+    }
+}
+
+private struct ChatFormattedText: View {
+    let text: String
+
+    private var lines: [String] {
+        text.replacingOccurrences(of: "\r\n", with: "\n").components(separatedBy: "\n")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(Array(lines.enumerated()), id: \.offset) { index, rawLine in
+                let line = rawLine.trimmingCharacters(in: .whitespaces)
+
+                if line.isEmpty {
+                    Color.clear.frame(height: index == 0 ? 0 : 2)
+                } else if line.hasPrefix("- ") {
+                    HStack(alignment: .top, spacing: 8) {
+                        Circle()
+                            .fill(Color.secondary)
+                            .frame(width: 5, height: 5)
+                            .padding(.top, 7)
+                        Text(String(line.dropFirst(2)))
+                            .font(.subheadline)
+                            .foregroundStyle(.primary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                } else if line.hasSuffix(":") && line.count < 40 {
+                    Text(line)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .textCase(.uppercase)
+                        .padding(.top, index == 0 ? 0 : 2)
+                } else {
+                    Text(line)
+                        .font(.subheadline)
+                        .lineSpacing(2)
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .textSelection(.enabled)
     }
 }
 
@@ -416,17 +472,25 @@ private struct AIResponseView: View {
     @State private var showMetrics = false
 
     var body: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(message.text)
-                    .textSelection(.enabled)
-                    .padding(12)
+        HStack(alignment: .top, spacing: 10) {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(Color.purple)
+                .frame(width: 3)
+                .padding(.vertical, 6)
+
+            VStack(alignment: .leading, spacing: 12) {
+                ChatFormattedText(text: message.text)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
                     .background(Color(.secondarySystemBackground))
-                    .cornerRadius(14)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .strokeBorder(.quaternary, lineWidth: 0.5)
+                    )
 
                 if let meta = message.metadata {
-                    // Compact summary badges
-                    HStack(spacing: 8) {
+                    HStack(spacing: 12) {
                         if let verif = meta.verification {
                             HStack(spacing: 3) {
                                 Image(systemName: confidenceIcon(verif.confidence))
@@ -457,10 +521,10 @@ private struct AIResponseView: View {
                             .foregroundStyle(.orange)
                         }
                     }
-                    .padding(.horizontal, 8)
+                    .font(.caption2)
+                    .padding(.horizontal, 6)
 
-                    // Expandable insight drawers
-                    VStack(spacing: 4) {
+                    VStack(spacing: 6) {
                         if !message.thinkingSteps.isEmpty {
                             expandableSection(title: "Thought Process", icon: "brain", count: message.thinkingSteps.count, isExpanded: $showThinking) {
                                 ThinkingStepsReplayView(steps: message.thinkingSteps)

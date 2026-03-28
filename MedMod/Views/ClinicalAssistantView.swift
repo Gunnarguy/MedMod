@@ -59,20 +59,31 @@ struct ClinicalAssistantView: View {
                             if message.isUser {
                                 Spacer()
                                 Text(message.text)
-                                    .padding(10)
+                                    .font(.subheadline)
+                                    .lineSpacing(2)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 10)
                                     .background(Color.blue)
                                     .foregroundColor(.white)
-                                    .cornerRadius(14)
+                                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                             } else {
-                                Text(message.text)
-                                    .padding(10)
-                                    #if os(iOS)
-                                    .background(Color(UIColor.secondarySystemBackground))
-                                    #else
-                                    .background(Color(NSColor.textBackgroundColor))
-                                    #endif
-                                    .cornerRadius(14)
-                                Spacer()
+                                HStack(alignment: .top, spacing: 10) {
+                                    RoundedRectangle(cornerRadius: 2)
+                                        .fill(Color.blue)
+                                        .frame(width: 3)
+                                        .padding(.vertical, 6)
+
+                                    ChatFormattedText(text: message.text)
+                                        .padding(.horizontal, 14)
+                                        .padding(.vertical, 12)
+                                        .background(Color(UIColor.secondarySystemBackground))
+                                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                                .strokeBorder(.quaternary, lineWidth: 0.5)
+                                        )
+                                }
+                                Spacer(minLength: 40)
                             }
                         }
                         .padding(.horizontal)
@@ -96,19 +107,28 @@ struct ClinicalAssistantView: View {
             }
 
             // Input bar
-            HStack(spacing: 8) {
-                TextField("Ask about \(patient.firstName)'s history...", text: $queryText)
-                    .textFieldStyle(.roundedBorder)
+            VStack(spacing: 0) {
+                Divider()
+                HStack(spacing: 12) {
+                    TextField("Ask about \(patient.firstName)'s history...", text: $queryText)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(Color(UIColor.secondarySystemBackground).opacity(0.8))
+                        .clipShape(Capsule())
+                        .onSubmit(askAssistant)
 
-                Button(action: askAssistant) {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.title2)
-                        .foregroundColor(.blue)
+                    Button(action: askAssistant) {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.system(size: 28))
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundColor(queryText.isEmpty ? .secondary.opacity(0.5) : .blue)
+                    }
+                    .disabled(queryText.isEmpty || isProcessing)
                 }
-                .disabled(queryText.isEmpty || isProcessing)
+                .padding(.horizontal)
+                .padding(.vertical, 12)
+                .background(.ultraThinMaterial)
             }
-            .padding(.horizontal)
-            .padding(.vertical, 8)
         }
         .navigationTitle("AI Assistant")
         #if os(iOS)
@@ -145,5 +165,50 @@ struct ClinicalAssistantView: View {
                 isProcessing = false
             }
         }
+    }
+}
+
+private struct ChatFormattedText: View {
+    let text: String
+
+    private var lines: [String] {
+        text.replacingOccurrences(of: "\r\n", with: "\n").components(separatedBy: "\n")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(Array(lines.enumerated()), id: \.offset) { index, rawLine in
+                let line = rawLine.trimmingCharacters(in: .whitespaces)
+
+                if line.isEmpty {
+                    Color.clear.frame(height: index == 0 ? 0 : 2)
+                } else if line.hasPrefix("- ") {
+                    HStack(alignment: .top, spacing: 8) {
+                        Circle()
+                            .fill(Color.secondary)
+                            .frame(width: 5, height: 5)
+                            .padding(.top, 7)
+                        Text(String(line.dropFirst(2)))
+                            .font(.subheadline)
+                            .foregroundStyle(.primary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                } else if line.hasSuffix(":") && line.count < 40 {
+                    Text(line)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .textCase(.uppercase)
+                        .padding(.top, index == 0 ? 0 : 2)
+                } else {
+                    Text(line)
+                        .font(.subheadline)
+                        .lineSpacing(2)
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .textSelection(.enabled)
     }
 }
