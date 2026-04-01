@@ -94,7 +94,8 @@ struct AgendaView: View {
                         Text(Date.now, format: .dateTime.weekday(.wide).month(.abbreviated).day())
                             .font(.caption2)
                             .foregroundStyle(.secondary)
-                            .lineLimit(1)
+                            .clinicalFinePrint()
+                            .clinicalCompactText()
                     }
 
                     Spacer()
@@ -107,13 +108,13 @@ struct AgendaView: View {
                                 Circle()
                                     .fill(Self.workflowColor(for: filterStatus))
                                     .frame(width: 6, height: 6)
-                                Text(filterStatus)
-                                    .font(.caption2.bold())
+                                Text(Self.workflowPillLabel(for: filterStatus))
+                                    .clinicalPillText(weight: .bold)
                                 Image(systemName: "xmark")
                                     .font(.system(size: 8, weight: .bold))
                             }
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
                             .background(Self.workflowColor(for: filterStatus).opacity(0.15), in: Capsule())
                             .foregroundStyle(Self.workflowColor(for: filterStatus))
                         }
@@ -124,10 +125,11 @@ struct AgendaView: View {
                         Image(systemName: "calendar.badge.clock")
                         Text("\(todaySchedule.count) today")
                             .fontWeight(.medium)
+                            .clinicalPillText(weight: .medium)
                     }
                     .font(.caption)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
                     .background(.purple.opacity(0.12), in: Capsule())
                     .foregroundStyle(.purple)
                 }
@@ -149,9 +151,8 @@ struct AgendaView: View {
                                         Circle()
                                             .fill(Self.workflowColor(for: status))
                                             .frame(width: 6, height: 6)
-                                        Text("\(status) (\(count))")
-                                            .font(.caption)
-                                            .lineLimit(1)
+                                        Text("\(Self.workflowPillLabel(for: status)) (\(count))")
+                                            .clinicalPillText()
                                     }
                                 }
                                 .buttonStyle(.bordered)
@@ -185,18 +186,23 @@ struct AgendaView: View {
                             Text("Next Up")
                                 .font(.caption2.bold())
                                 .foregroundStyle(.purple)
+                                .clinicalFinePrint(weight: .bold)
                             Text("\(nextUp.patient.firstName) \(nextUp.patient.lastName) — \(nextUp.appointment.reasonForVisit)")
                                 .font(.subheadline.weight(.medium))
-                                .lineLimit(1)
+                                .clinicalRowSummaryText()
                         }
+                        .layoutPriority(1)
                         Spacer()
                         Text(nextUp.appointment.scheduledTime, format: .dateTime.hour().minute())
                             .font(.caption.monospacedDigit())
                             .foregroundStyle(.secondary)
-                        Text(nextUp.appointment.status)
-                            .font(.caption2.weight(.medium))
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
+                            .clinicalFinePrintMonospaced()
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
+                        Text(Self.workflowPillLabel(for: nextUp.appointment.status))
+                            .clinicalPillText(weight: .medium)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
                             .background(Self.workflowColor(for: nextUp.appointment.status).opacity(0.15), in: Capsule())
                             .foregroundStyle(Self.workflowColor(for: nextUp.appointment.status))
                     }
@@ -257,8 +263,8 @@ struct AgendaView: View {
                                     .foregroundStyle(.secondary)
                                 Spacer()
                                 Text("\(group.items.count)")
-                                    .font(.caption2.weight(.medium).monospacedDigit())
-                                    .padding(.horizontal, 6)
+                                    .clinicalPillText(weight: .medium)
+                                    .padding(.horizontal, 4)
                                     .padding(.vertical, 2)
                                     .background(Color.secondary.opacity(0.12), in: Capsule())
                                     .foregroundStyle(.secondary)
@@ -283,13 +289,14 @@ struct AgendaView: View {
                         // Progress ring
                         ZStack {
                             Circle()
-                                .stroke(Color(.tertiarySystemFill), lineWidth: 2.5)
+                                .strokeBorder(Color(.tertiarySystemFill), lineWidth: 2.5)
                             Circle()
                                 .trim(from: 0, to: todaySchedule.isEmpty ? 0 : Double(statsCompleted) / Double(todaySchedule.count))
                                 .stroke(Color.green, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
                                 .rotationEffect(.degrees(-90))
+                                .padding(1.25)
                         }
-                        .frame(width: 20, height: 20)
+                        .frame(width: 24, height: 24)
                     }
                 }
             }
@@ -329,6 +336,18 @@ struct AgendaView: View {
         }
     }
 
+    static func workflowPillLabel(for status: String) -> String {
+        switch status {
+        case "Completed": return "Done"
+        case "Ready for Checkout": return "Checkout"
+        case "In Exam": return "Exam"
+        case "Waiting triage": return "Triage"
+        case "Checked In": return "Check-In"
+        case "Confirmed": return "Confirm"
+        default: return status
+        }
+    }
+
     private func workflowColor(for status: String) -> Color {
         Self.workflowColor(for: status)
     }
@@ -351,6 +370,7 @@ private struct AgendaMetricTile: View {
             Text(label)
                 .font(.system(size: 9))
                 .foregroundStyle(.secondary)
+                .clinicalMicroLabel()
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 10)
@@ -377,13 +397,15 @@ private struct AgendaRow: View {
             VStack(spacing: 2) {
                 Text(appointment.scheduledTime, format: .dateTime.hour().minute())
                     .font(.subheadline.monospacedDigit().weight(.medium))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
                 if let dur = appointment.durationMinutes {
                     Text("\(dur)m")
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                 }
             }
-            .frame(width: 52, alignment: .trailing)
+            .frame(width: 66, alignment: .trailing)
 
             // Vertical accent bar
             RoundedRectangle(cornerRadius: 2)
@@ -397,13 +419,14 @@ private struct AgendaRow: View {
                 Text(appointment.reasonForVisit)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                    .clinicalFinePrint()
+                    .clinicalRowSummaryText()
                 HStack(spacing: 8) {
                     if let type = appointment.encounterType {
                         Text(type)
-                            .font(.system(size: 9).weight(.medium))
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 2)
+                            .clinicalPillText(weight: .medium)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
                             .background(Color(.tertiarySystemFill), in: Capsule())
                             .foregroundStyle(.secondary)
                     }
@@ -413,6 +436,7 @@ private struct AgendaRow: View {
                                 .font(.system(size: 8))
                             Text("\(activeMedCount)")
                                 .font(.system(size: 9))
+                                .clinicalMicroLabel()
                         }
                         .foregroundStyle(.green)
                     }
@@ -421,16 +445,18 @@ private struct AgendaRow: View {
                             .font(.system(size: 8))
                             .foregroundStyle(.orange)
                     }
+                    ClinicalSourceBadge(descriptor: appointment.sourceDescriptor)
                 }
             }
+            .layoutPriority(1)
 
             Spacer()
 
             // Status chip
-            Text(appointment.status)
-                .font(.caption2.weight(.medium))
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
+            Text(AgendaView.workflowPillLabel(for: appointment.status))
+                .clinicalPillText(weight: .medium)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
                 .background(AgendaView.workflowColor(for: appointment.status).opacity(0.15))
                 .foregroundStyle(AgendaView.workflowColor(for: appointment.status))
                 .clipShape(Capsule())
@@ -491,6 +517,7 @@ struct InboxView: View {
                         Text(unreadCount > 0 ? "\(unreadCount) unread" : "All read")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
+                            .clinicalMicroLabel()
                     }
 
                     Spacer()
@@ -503,12 +530,12 @@ struct InboxView: View {
                                 Image(systemName: filterCategory.icon)
                                     .font(.system(size: 9))
                                 Text(filterCategory.rawValue)
-                                    .font(.caption2.bold())
+                                    .clinicalPillText(weight: .bold)
                                 Image(systemName: "xmark")
                                     .font(.system(size: 8, weight: .bold))
                             }
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
                             .background(filterCategory.color.opacity(0.15), in: Capsule())
                             .foregroundStyle(filterCategory.color)
                         }
@@ -519,10 +546,11 @@ struct InboxView: View {
                         Image(systemName: "envelope.fill")
                         Text("\(messages.count) messages")
                             .fontWeight(.medium)
+                            .clinicalPillText(weight: .medium)
                     }
                     .font(.caption)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
                     .background(.purple.opacity(0.12), in: Capsule())
                     .foregroundStyle(.purple)
                 }
@@ -544,7 +572,7 @@ struct InboxView: View {
                                         Image(systemName: cat.icon)
                                             .font(.system(size: 9))
                                         Text("\(cat.rawValue) (\(count))")
-                                            .font(.caption)
+                                            .clinicalPillText()
                                     }
                                 }
                                 .buttonStyle(.bordered)
@@ -667,16 +695,19 @@ private struct InboxMessageRow: View {
                     Text(message.date, format: .dateTime.month(.abbreviated).day())
                         .font(.caption2)
                         .foregroundStyle(.secondary)
+                        .clinicalMicroLabel()
                 }
                 Text(message.subject)
                     .font(.caption)
                     .foregroundStyle(.primary)
-                    .lineLimit(1)
+                    .clinicalFinePrint(weight: .semibold)
+                    .clinicalCompactText()
                 HStack(spacing: 6) {
                     Text(message.preview)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
-                        .lineLimit(2)
+                        .clinicalFinePrint()
+                        .clinicalRowSummaryText()
                 }
             }
         }
@@ -704,12 +735,13 @@ struct IntraMailDetailView: View {
                             Text(message.date, format: .dateTime.month().day().year().hour().minute())
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                                .clinicalFinePrint()
                         }
                         Spacer()
                         Text(message.category.rawValue)
-                            .font(.caption2.weight(.medium))
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
+                            .clinicalPillText(weight: .medium)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 2)
                             .background(message.category.color.opacity(0.15), in: Capsule())
                             .foregroundStyle(message.category.color)
                     }

@@ -85,6 +85,7 @@ struct AnatomicalRealityView: View {
             Text("Tap a region to view clinical data")
                 .font(.caption)
                 .foregroundColor(.secondary)
+                .clinicalFinePrint()
                 .padding(.bottom, 8)
 
             // Head
@@ -166,10 +167,12 @@ struct AnatomicalRealityView: View {
                 VStack(spacing: 0) {
                     Text(label)
                         .font(.system(size: 7, weight: isActive ? .bold : .regular))
+                        .clinicalMicroLabel(weight: isActive ? .bold : .regular)
                         .foregroundColor(isActive ? .red : .secondary)
                     if isActive {
                         Text("\(rCount)R \(pCount)P")
                             .font(.system(size: 6, weight: .medium).monospacedDigit())
+                            .clinicalMicroMonospaced()
                             .foregroundColor(.red.opacity(0.8))
                     }
                 }
@@ -195,10 +198,12 @@ struct AnatomicalRealityView: View {
                         Text(record.dateRecorded, format: .dateTime.month().day().year())
                             .font(.caption)
                             .foregroundColor(.secondary)
+                            .clinicalFinePrint()
                         if let icd10 = record.icd10Code {
                             Text(icd10)
                                 .font(.caption2.monospaced())
                                 .foregroundColor(.blue)
+                                .clinicalFinePrintMonospaced()
                         }
                     }
                 }
@@ -220,8 +225,13 @@ struct AnatomicalRealityView: View {
                             VStack(alignment: .leading) {
                                 Text(photo.captureDate, format: .dateTime.month().day().year())
                                     .font(.caption)
+                                    .clinicalFinePrint()
                                 if let notes = photo.notes {
-                                    Text(notes).font(.caption2).foregroundColor(.secondary)
+                                    Text(notes)
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                        .clinicalFinePrint()
+                                        .clinicalRowSummaryText(lines: 2)
                                 }
                             }
                         }
@@ -249,6 +259,7 @@ struct AnatomicalRealityView: View {
             Text(label)
                 .font(.caption)
                 .foregroundColor(.secondary)
+                .clinicalMicroLabel()
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 10)
@@ -272,6 +283,7 @@ struct AnatomicalRealityView: View {
                     Text("\(recordCount(for: region)) records · \(photoCount(for: region)) photos")
                         .font(.caption)
                         .foregroundColor(.secondary)
+                        .clinicalFinePrint()
                 }
                 Spacer()
                 Image(systemName: "chevron.right")

@@ -52,6 +52,7 @@ struct LesionTrackingView: View {
                 Text("\(photos.count) photo\(photos.count == 1 ? "" : "s")")
                     .font(.caption)
                     .foregroundColor(.secondary)
+                    .clinicalFinePrint()
             }
 
             ScrollView(.horizontal, showsIndicators: false) {
@@ -71,6 +72,7 @@ struct LesionTrackingView: View {
                 }
                 .font(.caption2)
                 .foregroundColor(.secondary)
+                .clinicalFinePrint()
             }
         }
         .padding()
@@ -93,11 +95,13 @@ struct LesionTrackingView: View {
             }
             Text(photo.captureDate, format: .dateTime.month(.abbreviated).day())
                 .font(.caption2.bold())
+                .clinicalMicroLabel(weight: .bold)
             if let notes = photo.notes, !notes.isEmpty {
                 Text(notes)
                     .font(.caption2)
                     .foregroundColor(.secondary)
-                    .lineLimit(2)
+                    .clinicalFinePrint()
+                    .clinicalRowSummaryText(lines: 2)
                     .frame(width: 100)
             }
         }

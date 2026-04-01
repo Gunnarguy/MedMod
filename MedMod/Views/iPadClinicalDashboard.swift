@@ -125,15 +125,19 @@ struct PatientAgendaRow: View {
                     Text(appointment.scheduledTime, format: .dateTime.hour().minute())
                         .font(.caption.monospacedDigit())
                         .foregroundStyle(.secondary)
+                        .clinicalFinePrintMonospaced()
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
                 }
                 HStack {
                     Text(appointment.reasonForVisit)
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                        .clinicalFinePrint()
+                        .clinicalRowSummaryText()
                     Spacer()
-                    Text(appointment.status)
-                        .font(.caption2.weight(.medium))
+                    Text(AgendaView.workflowPillLabel(for: appointment.status))
+                        .clinicalPillText(weight: .medium)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
                         .background(AgendaView.workflowColor(for: appointment.status).opacity(0.15))
@@ -166,6 +170,7 @@ private struct PatientRosterRow: View {
                 Text("MRN \(patient.medicalRecordNumber)")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+                    .clinicalFinePrint()
             }
 
             HStack(spacing: 10) {
@@ -176,12 +181,14 @@ private struct PatientRosterRow: View {
             }
             .font(.caption)
             .foregroundStyle(.secondary)
+            .clinicalFinePrint()
 
             if let nextAppointment {
                 Text("Next: \(nextAppointment.scheduledTime.formatted(date: .abbreviated, time: .shortened)) • \(nextAppointment.reasonForVisit)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                    .clinicalFinePrint()
+                    .clinicalRowSummaryText()
             }
         }
         .padding(.vertical, 3)

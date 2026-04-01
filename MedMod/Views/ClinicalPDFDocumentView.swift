@@ -36,6 +36,7 @@ struct ClinicalPDFDocumentView: View {
             HStack {
                 Text("Visit Note - \(visitNote.dateRecorded, format: .dateTime.month().day().year())")
                     .foregroundColor(.purple)
+                    .clinicalFinePrint(weight: .semibold)
                 Spacer()
                 Text("\(patient.lastName), \(patient.firstName)")
                     .font(.title3).bold().foregroundColor(.purple)
@@ -98,6 +99,7 @@ struct ClinicalPDFDocumentView: View {
             VStack(alignment: .center) {
                 Text("Electronically Signed By: \(visitNote.providerSignature ?? "\(patient.firstName) \(patient.lastName) Provider")")
                     .font(.caption)
+                    .clinicalFinePrint()
                     .underline()
             }
             .frame(maxWidth: .infinity)
