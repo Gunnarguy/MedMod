@@ -3,14 +3,29 @@ import SwiftData
 import Combine
 import os
 
+private struct AssistantMessage: Identifiable {
+    let id: UUID
+    let isUser: Bool
+    let text: String
+    let sourceDescriptor: ClinicalSourceDescriptor?
+
+    init(id: UUID = UUID(), isUser: Bool, text: String, sourceDescriptor: ClinicalSourceDescriptor? = nil) {
+        self.id = id
+        self.isUser = isUser
+        self.text = text
+        self.sourceDescriptor = sourceDescriptor
+    }
+}
+
 struct ClinicalAssistantView: View {
     let patient: PatientProfile
     @Environment(\.modelContext) private var modelContext
     @StateObject private var intelligenceService = ClinicalIntelligenceService()
 
     @State private var queryText = ""
-    @State private var chatHistory: [(isUser: Bool, text: String)] = []
+    @State private var chatHistory: [AssistantMessage] = []
     @State private var isProcessing = false
+    private let contentMaxWidth: CGFloat = 920
 
     private var quickPrompts: [String] {
         [
@@ -22,39 +37,62 @@ struct ClinicalAssistantView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        ZStack {
+            Color(.systemGroupedBackground)
+                .ignoresSafeArea()
+
+            VStack(spacing: 0) {
             HStack(spacing: 8) {
                 Image(systemName: "cpu")
                     .foregroundColor(.secondary)
                 Text(intelligenceService.engineStatusLabel)
                     .font(.caption)
                     .foregroundColor(.secondary)
+                    .clinicalFinePrint()
                 Spacer()
             }
             .padding(.horizontal)
             .padding(.top, 8)
+            .frame(maxWidth: contentMaxWidth)
 
             // Quick prompts
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(quickPrompts, id: \.self) { prompt in
-                        Button(prompt) {
-                            askAssistant(with: prompt)
+            GeometryReader { geometry in
+                let cardMaxWidth = min(max(geometry.size.width * 0.6, 160), 210)
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(quickPrompts, id: \.self) { prompt in
+                            Button {
+                                askAssistant(with: prompt)
+                            } label: {
+                                Text(prompt)
+                                    .font(.caption)
+                                    .clinicalFinePrint()
+                                    .multilineTextAlignment(.leading)
+                                    .lineLimit(3)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .frame(maxWidth: cardMaxWidth, alignment: .leading)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 9)
+                                    .background(.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.blue)
                         }
-                        .buttonStyle(.bordered)
-                        .font(.caption)
                     }
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: contentMaxWidth, alignment: .leading)
                 }
-                .padding(.horizontal)
-                .padding(.vertical, 8)
             }
+            .frame(height: 96)
 
             Divider()
 
             // Chat messages
             ScrollView {
                 LazyVStack(spacing: 12) {
-                    ForEach(Array(chatHistory.enumerated()), id: \.offset) { _, message in
+                    ForEach(chatHistory) { message in
                         HStack {
                             if message.isUser {
                                 Spacer()
@@ -73,15 +111,29 @@ struct ClinicalAssistantView: View {
                                         .frame(width: 3)
                                         .padding(.vertical, 6)
 
-                                    ChatFormattedText(text: message.text)
-                                        .padding(.horizontal, 14)
-                                        .padding(.vertical, 12)
-                                        .background(Color(UIColor.secondarySystemBackground))
-                                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                                .strokeBorder(.quaternary, lineWidth: 0.5)
-                                        )
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        if let sourceDescriptor = message.sourceDescriptor {
+                                            HStack(spacing: 6) {
+                                                ClinicalSourceBadge(descriptor: sourceDescriptor)
+                                                if let systemName = sourceDescriptor.systemName, !systemName.isEmpty {
+                                                    Text(systemName)
+                                                        .font(.caption2)
+                                                        .foregroundStyle(.secondary)
+                                                        .clinicalFinePrint()
+                                                }
+                                            }
+                                        }
+
+                                        ChatFormattedText(text: message.text)
+                                    }
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 12)
+                                    .background(Color(UIColor.secondarySystemBackground))
+                                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                            .strokeBorder(.quaternary, lineWidth: 0.5)
+                                    )
                                 }
                                 Spacer(minLength: 40)
                             }
@@ -103,7 +155,10 @@ struct ClinicalAssistantView: View {
                         .padding(.horizontal)
                     }
                 }
-                .padding(.top, 8)
+                .frame(maxWidth: contentMaxWidth)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 12)
+                .padding(.bottom, 16)
             }
 
             // Input bar
@@ -127,16 +182,19 @@ struct ClinicalAssistantView: View {
                 }
                 .padding(.horizontal)
                 .padding(.vertical, 12)
+                .frame(maxWidth: contentMaxWidth)
                 .background(.ultraThinMaterial)
             }
+            }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .navigationTitle("AI Assistant")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .onAppear {
             if chatHistory.isEmpty {
-                chatHistory.append((isUser: false, text: "I'm your on-device clinical assistant for \(patient.fullName). I can summarize visits, medications, allergies, risk flags, and upcoming follow-up directly from the local chart."))
+                chatHistory.append(AssistantMessage(isUser: false, text: "I'm your on-device clinical assistant for \(patient.fullName). I can summarize visits, medications, allergies, risk flags, and upcoming follow-up directly from the local chart.", sourceDescriptor: ClinicalSourceDescriptor(kind: .localAI, systemName: patient.sourceDescriptor.systemName ?? "Local Chart Cache", authoritative: false, lastSyncedAt: patient.sourceDescriptor.lastSyncedAt)))
             }
         }
     }
@@ -150,18 +208,18 @@ struct ClinicalAssistantView: View {
     private func askAssistant(with query: String) {
         guard !query.isEmpty else { return }
         AppLogger.assistant.info("💬 Patient query: \(query.prefix(80))")
-        chatHistory.append((isUser: true, text: query))
+        chatHistory.append(AssistantMessage(isUser: true, text: query))
         isProcessing = true
 
         Task {
             do {
                 let response = try await intelligenceService.executeToolQuery(query: query, modelContext: modelContext, patient: patient)
                 AppLogger.assistant.info("✅ Assistant response: \(response.count) chars")
-                chatHistory.append((isUser: false, text: response))
+                chatHistory.append(AssistantMessage(isUser: false, text: response, sourceDescriptor: ClinicalSourceDescriptor(kind: .localAI, systemName: patient.sourceDescriptor.systemName ?? "Local Chart Cache", authoritative: false, lastSyncedAt: patient.sourceDescriptor.lastSyncedAt)))
                 isProcessing = false
             } catch {
                 AppLogger.assistant.error("❌ Assistant query failed: \(error.localizedDescription)")
-                chatHistory.append((isUser: false, text: "Error: \(error.localizedDescription)"))
+                chatHistory.append(AssistantMessage(isUser: false, text: "Error: \(error.localizedDescription)", sourceDescriptor: ClinicalSourceDescriptor(kind: .localAI, systemName: patient.sourceDescriptor.systemName ?? "Local Chart Cache", authoritative: false, lastSyncedAt: patient.sourceDescriptor.lastSyncedAt)))
                 isProcessing = false
             }
         }

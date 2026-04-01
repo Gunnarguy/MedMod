@@ -10,13 +10,15 @@ private struct ChatMessage: Identifiable {
     let text: String
     let metadata: ResponseMetadata?
     let thinkingSteps: [ThinkingStep]
+    let sourceDescriptor: ClinicalSourceDescriptor?
 
-    init(id: UUID = UUID(), isUser: Bool, text: String, metadata: ResponseMetadata? = nil, thinkingSteps: [ThinkingStep] = []) {
+    init(id: UUID = UUID(), isUser: Bool, text: String, metadata: ResponseMetadata? = nil, thinkingSteps: [ThinkingStep] = [], sourceDescriptor: ClinicalSourceDescriptor? = nil) {
         self.id = id
         self.isUser = isUser
         self.text = text
         self.metadata = metadata
         self.thinkingSteps = thinkingSteps
+        self.sourceDescriptor = sourceDescriptor
     }
 }
 
@@ -64,9 +66,37 @@ struct ClinicIntelligenceView: View {
         ]
     }
 
+    private let contentMaxWidth: CGFloat = 920
+
+    private var currentChartSourceDescriptor: ClinicalSourceDescriptor {
+        if let selectedPatient {
+            return selectedPatient.sourceDescriptor
+        }
+        if let firstPatient = patients.first {
+            let distinctSources = Set(patients.map { $0.sourceKind })
+            if distinctSources.count == 1 {
+                return firstPatient.sourceDescriptor
+            }
+        }
+        return ClinicalSourceDescriptor(kind: .mixed, systemName: "Multiple chart sources", authoritative: false)
+    }
+
+    private var intelligenceSourceDescriptor: ClinicalSourceDescriptor {
+        ClinicalSourceDescriptor(
+            kind: .localAI,
+            systemName: currentChartSourceDescriptor.systemName ?? "Local Chart Cache",
+            authoritative: false,
+            lastSyncedAt: currentChartSourceDescriptor.lastSyncedAt
+        )
+    }
+
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
+            ZStack {
+                Color(.systemGroupedBackground)
+                    .ignoresSafeArea()
+
+                VStack(spacing: 0) {
                 // Context bar: engine status + RAG + Deep Think + patient picker
                 HStack(spacing: 8) {
                     HStack(spacing: 5) {
@@ -76,7 +106,8 @@ struct ClinicIntelligenceView: View {
                         Text(intelligenceService.engineStatusLabel)
                             .font(.caption2)
                             .foregroundStyle(.secondary)
-                            .lineLimit(1)
+                            .clinicalFinePrint()
+                            .clinicalCompactText()
                     }
 
                     Spacer()
@@ -90,10 +121,10 @@ struct ClinicIntelligenceView: View {
                             Image(systemName: deepThinkEnabled ? "brain.head.profile.fill" : "brain.head.profile")
                                 .symbolEffect(.bounce, value: deepThinkEnabled)
                             Text(deepThinkEnabled ? "Deep Think" : "Standard")
-                                .font(.caption2.bold())
+                                .clinicalPillText(weight: .bold)
                         }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
                         .background(deepThinkEnabled ? Color.orange.opacity(0.2) : Color(.tertiarySystemBackground), in: Capsule())
                         .foregroundStyle(deepThinkEnabled ? .orange : .secondary)
                     }
@@ -118,37 +149,52 @@ struct ClinicIntelligenceView: View {
                             Image(systemName: selectedPatient == nil ? "person.3.fill" : "person.crop.circle.fill")
                             Text(contextLabel)
                                 .fontWeight(.medium)
+                                .clinicalPillText(weight: .medium)
                             Image(systemName: "chevron.down")
                                 .font(.caption2)
                         }
                         .font(.caption)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
                         .background(.purple.opacity(0.12), in: Capsule())
                         .foregroundStyle(.purple)
                     }
                 }
                 .padding(.horizontal)
                 .padding(.top, 8)
+                .frame(maxWidth: contentMaxWidth)
 
                 // Quick prompts
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(quickPrompts, id: \.self) { prompt in
-                            Button {
-                                sendMessage(prompt)
-                            } label: {
-                                Text(prompt)
-                                    .font(.caption)
-                                    .lineLimit(2)
+                GeometryReader { geometry in
+                    let cardMaxWidth = min(max(geometry.size.width * 0.6, 160), 210)
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(quickPrompts, id: \.self) { prompt in
+                                Button {
+                                    sendMessage(prompt)
+                                } label: {
+                                    Text(prompt)
+                                        .font(.caption)
+                                        .clinicalFinePrint()
+                                        .multilineTextAlignment(.leading)
+                                        .lineLimit(3)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                        .frame(maxWidth: cardMaxWidth, alignment: .leading)
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 9)
+                                        .background(.purple.opacity(0.1), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundStyle(.purple)
                             }
-                            .buttonStyle(.bordered)
-                            .tint(.purple)
                         }
+                        .padding(.horizontal)
+                        .padding(.vertical, 8)
+                        .frame(maxWidth: contentMaxWidth, alignment: .leading)
                     }
-                    .padding(.horizontal)
-                    .padding(.vertical, 8)
                 }
+                .frame(height: 96)
 
                 Divider()
 
@@ -171,8 +217,10 @@ struct ClinicIntelligenceView: View {
                                 .id("thinking")
                             }
                         }
-                        .padding(.top, 8)
-                        .padding(.bottom, 12)
+                        .frame(maxWidth: contentMaxWidth)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 12)
+                        .padding(.bottom, 16)
                     }
                     .onChange(of: chatHistory.count) {
                         withAnimation {
@@ -211,8 +259,11 @@ struct ClinicIntelligenceView: View {
                     }
                     .padding(.horizontal)
                     .padding(.vertical, 12)
+                    .frame(maxWidth: contentMaxWidth)
                     .background(.ultraThinMaterial)
                 }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
             .navigationTitle("Clinical Intelligence")
             #if os(iOS)
@@ -265,12 +316,12 @@ struct ClinicIntelligenceView: View {
         if let p = selectedPatient {
             let medCount = p.medications?.count ?? 0
             let recordCount = p.clinicalRecords?.count ?? 0
-            chatHistory.append(ChatMessage(isUser: false, text: "Focused on \(p.fullName)'s chart — \(recordCount) records, \(medCount) medications. Ask me anything about their history, meds, appointments, risks, or care plan."))
+            chatHistory.append(ChatMessage(isUser: false, text: "Focused on \(p.fullName)'s chart — \(recordCount) records, \(medCount) medications. Ask me anything about their history, meds, appointments, risks, or care plan.", sourceDescriptor: intelligenceSourceDescriptor))
         } else {
             let recordCount = patients.reduce(0) { $0 + ($1.clinicalRecords?.count ?? 0) }
             let medCount = patients.reduce(0) { $0 + ($1.medications?.count ?? 0) }
             let ragLabel = ragService.indexedChunkCount > 0 ? " RAG: \(ragService.indexedChunkCount) chunks indexed." : ""
-            chatHistory.append(ChatMessage(isUser: false, text: "Panel intelligence ready — \(patients.count) patients, \(recordCount) records, \(medCount) medications.\(ragLabel) Ask about schedules, conditions, medications, risks, or patterns across your panel."))
+            chatHistory.append(ChatMessage(isUser: false, text: "Panel intelligence ready — \(patients.count) patients, \(recordCount) records, \(medCount) medications.\(ragLabel) Ask about schedules, conditions, medications, risks, or patterns across your panel.", sourceDescriptor: intelligenceSourceDescriptor))
         }
     }
 
@@ -300,11 +351,12 @@ struct ClinicIntelligenceView: View {
                     isUser: false,
                     text: response,
                     metadata: intelligenceService.ragMetadata,
-                    thinkingSteps: ragService.thinkingSteps
+                    thinkingSteps: ragService.thinkingSteps,
+                    sourceDescriptor: intelligenceSourceDescriptor
                 ))
             } catch {
                 AppLogger.intel.error("❌ Query failed: \(error.localizedDescription)")
-                chatHistory.append(ChatMessage(isUser: false, text: "Error: \(error.localizedDescription)"))
+                chatHistory.append(ChatMessage(isUser: false, text: "Error: \(error.localizedDescription)", sourceDescriptor: intelligenceSourceDescriptor))
             }
             isProcessing = false
         }
@@ -418,11 +470,13 @@ private struct ThinkingStreamView: View {
                             .font(.caption)
                             .fontWeight(.medium)
                             .foregroundStyle(step.phase == .complete ? .green : .primary)
+                                .clinicalFinePrint(weight: .medium)
                         if !step.detail.isEmpty {
                             Text(step.detail)
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
-                                .lineLimit(3)
+                                .clinicalFinePrint()
+                                .clinicalRowSummaryText(lines: 3)
                         }
                     }
                     .padding(.bottom, 6)
@@ -441,6 +495,7 @@ private struct ThinkingStreamView: View {
                 Text(steps.last?.phase == .complete ? "Generating response…" : "Processing…")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+                    .clinicalFinePrint()
             }
             .padding(.top, 2)
             .padding(.leading, 22)
@@ -479,6 +534,17 @@ private struct AIResponseView: View {
                 .padding(.vertical, 6)
 
             VStack(alignment: .leading, spacing: 12) {
+                if let sourceDescriptor = message.sourceDescriptor {
+                    HStack(spacing: 6) {
+                        ClinicalSourceBadge(descriptor: sourceDescriptor)
+                        if let systemName = sourceDescriptor.systemName, !systemName.isEmpty {
+                            Text(systemName)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
                 ChatFormattedText(text: message.text)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 12)
@@ -497,6 +563,7 @@ private struct AIResponseView: View {
                                     .font(.caption2)
                                 Text(verif.confidence.rawValue.capitalized)
                                     .font(.caption2.bold())
+                                    .clinicalMicroLabel(weight: .bold)
                             }
                             .foregroundStyle(confidenceColor(verif.confidence))
                         }
@@ -504,12 +571,14 @@ private struct AIResponseView: View {
                         Text("\(meta.usedChunkCount) sources")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
+                            .clinicalMicroLabel()
 
                         Text("·").foregroundStyle(.tertiary)
 
                         Text(String(format: "%.0fms", meta.totalTimeMs))
                             .font(.caption2)
                             .foregroundStyle(.secondary)
+                            .clinicalMicroMonospaced()
 
                         if meta.deepThinkPassesUsed > 1 {
                             HStack(spacing: 2) {
@@ -517,6 +586,7 @@ private struct AIResponseView: View {
                                     .font(.caption2)
                                 Text("\(meta.deepThinkPassesUsed) passes")
                                     .font(.caption2)
+                                    .clinicalMicroLabel()
                             }
                             .foregroundStyle(.orange)
                         }
@@ -559,22 +629,31 @@ private struct AIResponseView: View {
     private func expandableSection<Content: View>(title: String, icon: String, count: Int?, isExpanded: Binding<Bool>, @ViewBuilder content: @escaping () -> Content) -> some View {
         DisclosureGroup(isExpanded: isExpanded) {
             content()
-                .padding(.top, 4)
+                .padding(.top, 6)
         } label: {
-            HStack(spacing: 4) {
+            HStack(spacing: 8) {
                 Image(systemName: icon)
                     .font(.caption2)
+                    .frame(width: 14)
                 Text(title)
-                    .font(.caption2.bold())
+                    .font(.caption2.weight(.semibold))
+                    .clinicalFinePrint(weight: .semibold)
+                Spacer()
                 if let count {
-                    Text("(\(count))")
-                        .font(.caption2)
+                    Text("\(count)")
+                        .clinicalPillText(weight: .medium)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(Color(.tertiarySystemBackground), in: Capsule())
                         .foregroundStyle(.secondary)
                 }
             }
             .foregroundStyle(.purple)
         }
         .font(.caption2)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 7)
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private func confidenceIcon(_ tier: ConfidenceTier) -> String {
@@ -608,6 +687,7 @@ private struct ThinkingStepsReplayView: View {
                     Text(String(format: "+%.0fms", step.timestamp.timeIntervalSince(baseTime) * 1000))
                         .font(.system(.caption2, design: .monospaced))
                         .foregroundStyle(.tertiary)
+                        .clinicalMicroMonospaced()
                         .frame(width: 55, alignment: .trailing)
 
                     Image(systemName: step.icon)
@@ -619,11 +699,13 @@ private struct ThinkingStepsReplayView: View {
                         Text(step.title)
                             .font(.caption2)
                             .fontWeight(.medium)
+                            .clinicalFinePrint(weight: .medium)
                         if !step.detail.isEmpty {
                             Text(step.detail)
                                 .font(.system(size: 9))
                                 .foregroundStyle(.secondary)
-                                .lineLimit(2)
+                                .clinicalFinePrint()
+                                .clinicalRowSummaryText()
                         }
                     }
                     Spacer()
@@ -656,45 +738,53 @@ private struct SourcesListView: View {
                         Text("\(index + 1).")
                             .font(.caption2.bold())
                             .foregroundStyle(.purple)
+                            .clinicalFinePrint(weight: .bold)
                         Text(chunk.patientName)
                             .font(.caption2.bold())
+                            .clinicalFinePrint(weight: .bold)
                         Text("— \(chunk.sectionTitle)")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
+                            .clinicalFinePrint()
                         Spacer()
                     }
 
                     HStack(spacing: 6) {
                         Text(String(format: "%.4f", chunk.score))
                             .font(.system(.caption2, design: .monospaced))
+                            .clinicalMicroMonospaced()
                         if let vr = chunk.vectorRank {
                             Text("V:#\(vr)")
                                 .font(.system(.caption2, design: .monospaced))
                                 .foregroundStyle(.blue)
+                                .clinicalMicroMonospaced()
                         }
                         if let kr = chunk.keywordRank {
                             Text("K:#\(kr)")
                                 .font(.system(.caption2, design: .monospaced))
                                 .foregroundStyle(.green)
+                                .clinicalMicroMonospaced()
                         }
                         if let date = chunk.dateRecorded {
                             Text(date, style: .date)
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
+                                .clinicalFinePrint()
                         }
                     }
 
                     Text(chunk.preview)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
-                        .lineLimit(2)
+                        .clinicalFinePrint()
+                        .clinicalRowSummaryText(lines: 2)
                         .italic()
                 }
                 .padding(8)
-                .background(Color(.tertiarySystemBackground))
-                .cornerRadius(8)
+                .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
         }
+        .padding(.top, 2)
     }
 }
 
@@ -714,14 +804,16 @@ private struct GatesGridView: View {
     ]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text(String(format: "Overall: %.0f%%", verification.overallScore * 100))
                     .font(.caption2.bold())
+                    .clinicalFinePrint(weight: .bold)
                 Spacer()
                 Text("\(verification.gateResults.values.filter { $0 }.count)/7 passed")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+                    .clinicalFinePrint()
             }
 
             ForEach(gateNames, id: \.key) { gate in
@@ -736,6 +828,7 @@ private struct GatesGridView: View {
                         .frame(width: 14)
                     Text(gate.label)
                         .font(.caption2)
+                        .clinicalFinePrint()
                     Spacer()
                 }
             }
@@ -750,10 +843,12 @@ private struct GatesGridView: View {
                         Text(warning)
                             .font(.caption2)
                             .foregroundStyle(.secondary)
+                            .clinicalFinePrint()
                     }
                 }
             }
         }
+        .padding(.top, 2)
     }
 }
 
@@ -793,6 +888,7 @@ private struct PipelineMetricsView: View {
                 }
             }
         }
+        .padding(.top, 2)
     }
 
     private func metricRow(_ label: String, _ value: String, icon: String) -> some View {
@@ -804,9 +900,11 @@ private struct PipelineMetricsView: View {
             Text(label)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
+                .clinicalFinePrint()
             Spacer()
             Text(value)
                 .font(.system(.caption2, design: .monospaced))
+                .clinicalFinePrintMonospaced()
         }
     }
 }
