@@ -304,14 +304,18 @@ final class CoreMLEmbeddingProvider: ClinicalEmbeddingProvider, @unchecked Senda
 /// Apple NaturalLanguage framework embedding — 512-dimension word embeddings.
 /// Available on all iOS 17+ devices without any bundle assets.
 final class NLEmbeddingProvider: ClinicalEmbeddingProvider, @unchecked Sendable {
-    let dimension: Int = 512
+    private static let fallbackDimension = 512
 
     private let embedding: NLEmbedding?
+
+    var dimension: Int {
+        embedding?.dimension ?? Self.fallbackDimension
+    }
 
     init() {
         embedding = NLEmbedding.wordEmbedding(for: .english)
         if embedding != nil {
-            AppLogger.ai.info("✅ NLEmbedding (English, 512D) loaded")
+            AppLogger.ai.info("✅ NLEmbedding (English, \(self.dimension)D) loaded")
         } else {
             AppLogger.ai.warning("⚠️ NLEmbedding not available")
         }
@@ -333,28 +337,30 @@ final class NLEmbeddingProvider: ClinicalEmbeddingProvider, @unchecked Sendable 
         let words = text.lowercased().split(separator: " ").map(String.init)
         guard !words.isEmpty else { throw EmbeddingError.emptyInput }
 
-        var summed = [Double](repeating: 0, count: dimension)
+        let outputDimension = max(dimension, 1)
+        var summed = [Double](repeating: 0, count: outputDimension)
         var validCount = 0
 
         for word in words {
-            if let vec = embedding.vector(for: word) {
+            if let vec = embedding.vector(for: word), !vec.isEmpty {
                 validCount += 1
-                for i in 0..<dimension { summed[i] += vec[i] }
+                let validDimension = min(outputDimension, vec.count)
+                for i in 0..<validDimension { summed[i] += vec[i] }
             }
         }
 
         guard validCount > 0 else {
             // No known words — return zero vector
-            return [Float](repeating: 0, count: dimension)
+            return [Float](repeating: 0, count: outputDimension)
         }
 
         // Mean + L2 normalize
         let mean = summed.map { Float($0 / Double(validCount)) }
         var sqSum: Float = 0
-        vDSP_svesq(mean, 1, &sqSum, vDSP_Length(dimension))
+        vDSP_svesq(mean, 1, &sqSum, vDSP_Length(outputDimension))
         var norm = max(sqrt(sqSum), 1e-9)
-        var normalized = [Float](repeating: 0, count: dimension)
-        vDSP_vsdiv(mean, 1, &norm, &normalized, 1, vDSP_Length(dimension))
+        var normalized = [Float](repeating: 0, count: outputDimension)
+        vDSP_vsdiv(mean, 1, &norm, &normalized, 1, vDSP_Length(outputDimension))
 
         return normalized
     }
@@ -385,7 +391,7 @@ final class ClinicalEmbeddingService: @unchecked Sendable {
     }
 
     var providerName: String {
-        coreML.isAvailable ? "CoreML MiniLM-L6-v2 (384D)" : "NLEmbedding (512D)"
+        coreML.isAvailable ? "CoreML MiniLM-L6-v2 (384D)" : "NLEmbedding (\(nlFallback.dimension)D)"
     }
 
     var isAvailable: Bool { coreML.isAvailable || nlFallback.isAvailable }
@@ -393,7 +399,7 @@ final class ClinicalEmbeddingService: @unchecked Sendable {
     init() {
         coreML = CoreMLEmbeddingProvider()
         nlFallback = NLEmbeddingProvider()
-        AppLogger.ai.info("🧬 EmbeddingService initialized — active: \(self.coreML.isAvailable ? "CoreML 384D" : "NLEmbedding 512D")")
+        AppLogger.ai.info("🧬 EmbeddingService initialized — active: \(self.coreML.isAvailable ? "CoreML 384D" : "NLEmbedding \(self.nlFallback.dimension)D")")
     }
 
     func embed(text: String) async throws -> [Float] {
