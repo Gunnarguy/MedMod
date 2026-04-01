@@ -10,7 +10,7 @@ struct EHRMainShellView: View {
     #endif
 
     enum TabSelection {
-        case agenda, patient, intelligence, inbox
+        case agenda, patient, intelligence, inbox, settings
     }
 
     var body: some View {
@@ -53,6 +53,13 @@ struct EHRMainShellView: View {
                 }
                 .tag(TabSelection.inbox)
                 .onAppear { AppLogger.nav.info("📬 Inbox tab appeared") }
+
+            MedModSettingsView()
+                .tabItem {
+                    Label("Settings", systemImage: "gearshape")
+                }
+                .tag(TabSelection.settings)
+                .onAppear { AppLogger.nav.info("⚙️ Settings tab appeared") }
         }
         #if os(iOS)
         .tabBarMinimizeBehavior(.onScrollDown)

@@ -11,6 +11,7 @@ import os
 
 @main
 struct MedModApp: App {
+    @StateObject private var smartConnectionController = SMARTConnectionController()
     let container: ModelContainer
 
     init() {
@@ -61,6 +62,12 @@ struct MedModApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environmentObject(smartConnectionController)
+                .onOpenURL { url in
+                    Task {
+                        await smartConnectionController.handleOpenURL(url)
+                    }
+                }
                 .task {
                     // Reindex RAG pipeline on every launch
                     AppLogger.app.info("🔄 Triggering RAG reindex on launch")
