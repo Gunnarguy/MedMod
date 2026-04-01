@@ -516,6 +516,7 @@ struct ContentView: View {
         appointments: [Appointment]
     ) {
         for patient in patients {
+            applyPatientProvenance(patient)
             switch patient.fullName {
             case "Catherine Hartley":
                 applyPatientMetadata(
@@ -721,6 +722,14 @@ struct ContentView: View {
         patient.bloodType = bloodType
     }
 
+    private func applyPatientProvenance(_ patient: PatientProfile) {
+        patient.sourceKind = ClinicalSourceKind.demoLocalCache.rawValue
+        patient.sourceSystemName = "MedMod Demo Dataset"
+        patient.sourceRecordIdentifier = patient.medicalRecordNumber
+        patient.sourceLastSyncedAt = .now
+        patient.sourceOfTruth = false
+    }
+
     private func applyMedicationMetadata(
         _ medication: LocalMedication,
         genericName: String,
@@ -745,6 +754,11 @@ struct ContentView: View {
         medication.nextRefillEligibleDate = nextRefillInDays.map { Calendar.current.date(byAdding: .day, value: $0, to: .now) ?? .now }
         medication.pharmacyName = pharmacyName
         medication.safetyNotes = safetyNotes
+        medication.sourceKind = ClinicalSourceKind.demoLocalCache.rawValue
+        medication.sourceSystemName = "MedMod Demo Dataset"
+        medication.sourceRecordIdentifier = medication.rxID
+        medication.sourceLastSyncedAt = .now
+        medication.sourceOfTruth = false
     }
 
     private func applyRecordMetadata(
@@ -762,6 +776,15 @@ struct ContentView: View {
         record.followUpPlan = followUpPlan
         record.recommendedOrders = recommendedOrders
         record.carePlanSummary = carePlanSummary
+        record.documentationStatus = record.status == "Final"
+            ? DocumentationLifecycleStatus.signed.rawValue
+            : DocumentationLifecycleStatus.reviewed.rawValue
+        record.documentationSignedAt = record.status == "Final" ? record.dateRecorded : nil
+        record.sourceKind = ClinicalSourceKind.demoLocalCache.rawValue
+        record.sourceSystemName = "MedMod Demo Dataset"
+        record.sourceRecordIdentifier = record.recordID
+        record.sourceLastSyncedAt = .now
+        record.sourceOfTruth = false
     }
 
     private func applyAppointmentMetadata(
@@ -781,6 +804,11 @@ struct ContentView: View {
         appointment.checkInStatus = checkInStatus
         appointment.prepInstructions = prepInstructions
         appointment.linkedDiagnoses = linkedDiagnoses
+        appointment.sourceKind = ClinicalSourceKind.demoLocalCache.rawValue
+        appointment.sourceSystemName = "MedMod Demo Dataset"
+        appointment.sourceRecordIdentifier = appointment.appointmentID
+        appointment.sourceLastSyncedAt = .now
+        appointment.sourceOfTruth = false
     }
     // swiftlint:enable function_body_length
 }

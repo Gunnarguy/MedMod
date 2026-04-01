@@ -138,6 +138,11 @@ struct ClinicalExamWorkspace: View {
     private var isCompact: Bool { false }
     #endif
 
+    private var savedRecord: LocalClinicalRecord? {
+        guard let savedRecordID = workflowState.savedRecordID else { return nil }
+        return patient.clinicalRecords?.first(where: { $0.recordID == savedRecordID })
+    }
+
     var body: some View {
         Group {
             if isCompact {
@@ -482,10 +487,52 @@ struct ClinicalExamWorkspace: View {
 
                 Divider()
 
-                Button(action: { signAndSave(note: note) }) {
-                    Label("Sign & Generate PDF", systemImage: "signature")
-                        .frame(maxWidth: .infinity).padding(.vertical, 12)
-                        .foregroundColor(.white).background(Color.blue).cornerRadius(12)
+                VStack(spacing: 10) {
+                    Button(action: { persistGeneratedNote(note: note, lifecycle: .draft, generatePDF: false) }) {
+                        Label("Save Draft", systemImage: "square.and.arrow.down")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .foregroundColor(.white)
+                            .background(Color.orange)
+                            .cornerRadius(12)
+                    }
+
+                    Button(action: { persistGeneratedNote(note: note, lifecycle: .reviewed, generatePDF: false) }) {
+                        Label("Mark Reviewed", systemImage: "checkmark.circle")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .foregroundColor(.white)
+                            .background(Color.indigo)
+                            .cornerRadius(12)
+                    }
+
+                    Button(action: { persistGeneratedNote(note: note, lifecycle: .signed, generatePDF: true) }) {
+                        Label("Sign & Generate PDF", systemImage: "signature")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .foregroundColor(.white)
+                            .background(Color.blue)
+                            .cornerRadius(12)
+                    }
+                }
+
+                if let lastSavedDocumentationStatus = workflowState.lastSavedDocumentationStatus {
+                    HStack(spacing: 6) {
+                        Image(systemName: lastSavedDocumentationStatus == .signed ? "checkmark.seal.fill" : "doc.badge.clock")
+                            .foregroundColor(lastSavedDocumentationStatus == .signed ? .green : .orange)
+                        Text("Record saved as \(lastSavedDocumentationStatus.label)")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                if let savedRecord {
+                    NavigationLink(destination: VisitRecordDetailView(record: savedRecord, patient: patient)) {
+                        Label("Open Saved Record", systemImage: "doc.text.magnifyingglass")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                    }
+                    .buttonStyle(.bordered)
                 }
 
                 if let url = workflowState.generatedPDFURL {
@@ -538,35 +585,85 @@ struct ClinicalExamWorkspace: View {
         }
     }
 
-    private func signAndSave(note: ClinicalVisitNote) {
-        let record = LocalClinicalRecord(
-            recordID: UUID().uuidString,
-            dateRecorded: Date(),
-            conditionName: note.primaryDiagnosis,
-            status: "Final",
-            isHiddenFromPortal: false,
-            visitType: "AI-assisted encounter",
-            ccHPI: note.ccHPI,
-            reviewOfSystems: note.reviewOfSystems,
-            examFindings: note.examFindings,
-            impressionsAndPlan: note.impressionsAndPlan,
-            affectedAnatomicalZones: note.affectedAnatomicalZones,
-            providerSignature: patient.primaryClinician ?? "\(patient.fullName) Care Team",
-            patientInstructions: note.patientInstructions,
-            followUpPlan: note.followUpPlan,
-            recommendedOrders: note.recommendedOrders,
-            carePlanSummary: note.impressionsAndPlan
-        )
-        modelContext.insert(record)
-        patient.clinicalRecords?.append(record)
-        try? modelContext.save()
-        AppLogger.exam.info("📝 Clinical record saved: \(record.recordID) — \(note.primaryDiagnosis)")
+    private func persistGeneratedNote(note: ClinicalVisitNote, lifecycle: DocumentationLifecycleStatus, generatePDF: Bool) {
+        let record: LocalClinicalRecord
+        let createdNewRecord: Bool
 
-        if let url = generatePDFLocally(patient: patient, record: record, details: note) {
-            workflowState.generatedPDFURL = url
-            AppLogger.exam.info("📄 PDF generated: \(url.lastPathComponent)")
+        if let existing = savedRecord {
+            record = existing
+            createdNewRecord = false
         } else {
-            AppLogger.exam.warning("⚠️ PDF generation returned nil")
+            let recordID = UUID().uuidString
+            record = LocalClinicalRecord(
+                recordID: recordID,
+                dateRecorded: Date(),
+                conditionName: note.primaryDiagnosis,
+                status: "Preliminary",
+                isHiddenFromPortal: false,
+                visitType: "AI-assisted encounter",
+                ccHPI: note.ccHPI,
+                reviewOfSystems: note.reviewOfSystems,
+                examFindings: note.examFindings,
+                impressionsAndPlan: note.impressionsAndPlan,
+                affectedAnatomicalZones: note.affectedAnatomicalZones,
+                patientInstructions: note.patientInstructions,
+                followUpPlan: note.followUpPlan,
+                recommendedOrders: note.recommendedOrders,
+                carePlanSummary: note.impressionsAndPlan,
+                documentationStatus: lifecycle.rawValue,
+                documentationSignedAt: lifecycle == .signed ? .now : nil,
+                sourceKind: ClinicalSourceKind.localAI.rawValue,
+                sourceSystemName: "MedMod Encounter Workspace",
+                sourceRecordIdentifier: recordID,
+                sourceLastSyncedAt: .now,
+                sourceOfTruth: false
+            )
+            modelContext.insert(record)
+            if patient.clinicalRecords == nil {
+                patient.clinicalRecords = []
+            }
+            patient.clinicalRecords?.append(record)
+            workflowState.savedRecordID = recordID
+            createdNewRecord = true
+        }
+
+        record.conditionName = note.primaryDiagnosis
+        record.status = lifecycle == .signed ? "Final" : "Preliminary"
+        record.visitType = "AI-assisted encounter"
+        record.ccHPI = note.ccHPI
+        record.reviewOfSystems = note.reviewOfSystems
+        record.examFindings = note.examFindings
+        record.impressionsAndPlan = note.impressionsAndPlan
+        record.affectedAnatomicalZones = note.affectedAnatomicalZones
+        record.patientInstructions = note.patientInstructions
+        record.followUpPlan = note.followUpPlan
+        record.recommendedOrders = note.recommendedOrders
+        record.carePlanSummary = note.impressionsAndPlan
+        record.documentationStatus = lifecycle.rawValue
+        record.documentationSignedAt = lifecycle == .signed ? .now : nil
+        record.providerSignature = lifecycle == .signed ? (patient.primaryClinician ?? "\(patient.fullName) Care Team") : nil
+        record.sourceKind = ClinicalSourceKind.localAI.rawValue
+        record.sourceSystemName = "MedMod Encounter Workspace"
+        record.sourceRecordIdentifier = record.recordID
+        record.sourceLastSyncedAt = .now
+        record.sourceOfTruth = false
+        record.patient = patient
+
+        try? modelContext.save()
+        workflowState.lastSavedDocumentationStatus = lifecycle
+
+        AppLogger.exam.info("📝 Clinical record \(createdNewRecord ? "created" : "updated"): \(record.recordID) — \(note.primaryDiagnosis) [\(lifecycle.rawValue)]")
+
+        if generatePDF {
+            if let url = generatePDFLocally(patient: patient, record: record, details: note) {
+                workflowState.generatedPDFURL = url
+                AppLogger.exam.info("📄 PDF generated: \(url.lastPathComponent)")
+            } else {
+                workflowState.generatedPDFURL = nil
+                AppLogger.exam.warning("⚠️ PDF generation returned nil")
+            }
+        } else {
+            workflowState.generatedPDFURL = nil
         }
     }
 

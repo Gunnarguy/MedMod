@@ -20,6 +20,11 @@ final class LocalMedication {
     var nextRefillEligibleDate: Date?
     var pharmacyName: String?
     var safetyNotes: [String]?
+    var sourceKind: String
+    var sourceSystemName: String?
+    var sourceRecordIdentifier: String?
+    var sourceLastSyncedAt: Date?
+    var sourceOfTruth: Bool
     var patient: PatientProfile?
 
     init(
@@ -39,7 +44,12 @@ final class LocalMedication {
         lastFilledDate: Date? = nil,
         nextRefillEligibleDate: Date? = nil,
         pharmacyName: String? = nil,
-        safetyNotes: [String]? = nil
+        safetyNotes: [String]? = nil,
+        sourceKind: String = ClinicalSourceKind.manualEntry.rawValue,
+        sourceSystemName: String? = nil,
+        sourceRecordIdentifier: String? = nil,
+        sourceLastSyncedAt: Date? = nil,
+        sourceOfTruth: Bool = false
     ) {
         self.rxID = rxID
         self.medicationName = medicationName
@@ -58,6 +68,11 @@ final class LocalMedication {
         self.nextRefillEligibleDate = nextRefillEligibleDate
         self.pharmacyName = pharmacyName
         self.safetyNotes = safetyNotes
+        self.sourceKind = sourceKind
+        self.sourceSystemName = sourceSystemName
+        self.sourceRecordIdentifier = sourceRecordIdentifier
+        self.sourceLastSyncedAt = sourceLastSyncedAt
+        self.sourceOfTruth = sourceOfTruth
     }
 
     var hasRefillsRemaining: Bool {

@@ -43,7 +43,7 @@ struct RxListView: View {
                 HStack {
                     Image(systemName: "info.circle")
                         .foregroundColor(.blue)
-                    Text("Rx data is sourced from local clinical records. Data never leaves this device.")
+                    Text("Each prescription row shows its source. Demo data stays local today, and future SMART/FHIR sync can populate authoritative medication records.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -76,9 +76,9 @@ struct RxRowView: View {
                 Spacer()
                 VStack(alignment: .trailing, spacing: 2) {
                     Text(rx.status ?? "Active")
-                        .font(.caption.bold())
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
+                        .clinicalPillText(weight: .bold)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
                         .background(rx.status == "Active" ? Color.green.opacity(0.15) : Color.gray.opacity(0.15))
                         .foregroundColor(rx.status == "Active" ? .green : .gray)
                         .cornerRadius(6)
@@ -99,6 +99,10 @@ struct RxRowView: View {
             }
             .font(.caption2)
             .foregroundColor(.secondary)
+            HStack(spacing: 6) {
+                ClinicalSourceBadge(descriptor: rx.sourceDescriptor)
+                SourceOfTruthBadge(authoritative: rx.sourceDescriptor.authoritative)
+            }
             if let lastFilledDate = rx.lastFilledDate {
                 HStack {
                     Text("Last Filled: \(lastFilledDate, format: .dateTime.month().day().year())")

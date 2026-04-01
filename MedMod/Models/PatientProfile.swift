@@ -18,6 +18,11 @@ final class PatientProfile {
     var emergencyContactName: String?
     var emergencyContactPhone: String?
     var bloodType: String?
+    var sourceKind: String
+    var sourceSystemName: String?
+    var sourceRecordIdentifier: String?
+    var sourceLastSyncedAt: Date?
+    var sourceOfTruth: Bool
 
     @Relationship(deleteRule: .cascade, inverse: \LocalClinicalRecord.patient) var clinicalRecords: [LocalClinicalRecord]?
     @Relationship(deleteRule: .cascade, inverse: \LocalMedication.patient) var medications: [LocalMedication]?
@@ -39,7 +44,12 @@ final class PatientProfile {
         riskFlags: [String] = [],
         emergencyContactName: String? = nil,
         emergencyContactPhone: String? = nil,
-        bloodType: String? = nil
+        bloodType: String? = nil,
+        sourceKind: String = ClinicalSourceKind.manualEntry.rawValue,
+        sourceSystemName: String? = nil,
+        sourceRecordIdentifier: String? = nil,
+        sourceLastSyncedAt: Date? = nil,
+        sourceOfTruth: Bool = false
     ) {
         self.id = id
         self.medicalRecordNumber = medicalRecordNumber
@@ -56,6 +66,11 @@ final class PatientProfile {
         self.emergencyContactName = emergencyContactName
         self.emergencyContactPhone = emergencyContactPhone
         self.bloodType = bloodType
+        self.sourceKind = sourceKind
+        self.sourceSystemName = sourceSystemName
+        self.sourceRecordIdentifier = sourceRecordIdentifier
+        self.sourceLastSyncedAt = sourceLastSyncedAt
+        self.sourceOfTruth = sourceOfTruth
         self.clinicalRecords = []
         self.medications = []
         self.appointments = []

@@ -41,10 +41,12 @@ struct ChartNotesView: View {
                         Text("\(filteredRecords.count) of \(records.count) notes")
                             .font(.caption)
                             .foregroundColor(.secondary)
+                            .clinicalFinePrint()
                         Spacer()
                         if filterStatus != nil {
                             Button("Clear Filter") { filterStatus = nil }
                                 .font(.caption)
+                                .clinicalFinePrint()
                         }
                     }
                 }
@@ -59,16 +61,22 @@ struct ChartNotesView: View {
                                         Text(visitType)
                                             .font(.caption)
                                             .foregroundColor(.secondary)
+                                            .clinicalFinePrint()
                                     }
                                     Text(record.dateRecorded, format: .dateTime.month().day().year())
                                         .font(.caption)
                                         .foregroundColor(.secondary)
+                                        .clinicalFinePrint()
+                                    HStack(spacing: 6) {
+                                        DocumentationStatusBadge(status: record.documentationLifecycle)
+                                        ClinicalSourceBadge(descriptor: record.sourceDescriptor)
+                                    }
                                 }
                                 Spacer()
                                 VStack(alignment: .trailing, spacing: 4) {
                                     Text(record.status)
-                                        .font(.caption2.bold())
-                                        .padding(.horizontal, 6)
+                                        .clinicalPillText(weight: .bold)
+                                        .padding(.horizontal, 5)
                                         .padding(.vertical, 2)
                                         .background(record.status == "Final" ? Color.green.opacity(0.15) : Color.orange.opacity(0.15))
                                         .foregroundColor(record.status == "Final" ? .green : .orange)
@@ -81,6 +89,7 @@ struct ChartNotesView: View {
                                     if let icd10 = record.icd10Code, !icd10.isEmpty {
                                         Text(icd10)
                                             .font(.caption2.monospaced())
+                                            .clinicalMicroMonospaced()
                                             .padding(.horizontal, 4)
                                             .padding(.vertical, 1)
                                             .background(Color.blue.opacity(0.1))
@@ -94,14 +103,16 @@ struct ChartNotesView: View {
                                 Text(ccHPI)
                                     .font(.caption)
                                     .foregroundColor(.secondary)
-                                    .lineLimit(2)
+                                    .clinicalFinePrint()
+                                    .clinicalRowSummaryText(lines: 2)
                             }
 
                             if let followUpPlan = record.followUpPlan, !followUpPlan.isEmpty {
                                 Text(followUpPlan)
                                     .font(.caption2)
                                     .foregroundColor(.secondary)
-                                    .lineLimit(1)
+                                    .clinicalFinePrint()
+                                    .clinicalRowSummaryText()
                             }
                         }
                         .padding(.vertical, 4)

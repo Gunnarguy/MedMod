@@ -43,16 +43,17 @@ struct PatientDashboardView: View {
                             Image(systemName: "person.crop.circle.fill")
                             Text("Panel")
                                 .fontWeight(.medium)
+                                .clinicalPillText(weight: .medium)
                         }
                         .font(.caption)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
                         .background(.purple.opacity(0.12), in: Capsule())
                         .foregroundStyle(.purple)
                     }
                     .padding(.horizontal)
-                    .padding(.top, 8)
-                    .padding(.bottom, 4)
+                    .padding(.top, 12)
+                    .padding(.bottom, 6)
 
                     if filteredPatients.isEmpty {
                         ContentUnavailableView(
@@ -125,7 +126,7 @@ private struct PatientListRow: View {
                 Text("Next: \(nextAppointment.scheduledTime.formatted(date: .abbreviated, time: .shortened)) • \(nextAppointment.reasonForVisit)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                    .clinicalRowSummaryText(lines: 2)
             }
         }
         .padding(.vertical, 4)
@@ -175,6 +176,10 @@ struct PatientChartPageView: View {
 
     private var nextAppointment: Appointment? {
         sortedAppointments.first { $0.scheduledTime >= Date() }
+    }
+
+    private var latestRecord: LocalClinicalRecord? {
+        sortedRecords.first
     }
 
     // MARK: - Patient Content
@@ -279,18 +284,27 @@ struct PatientChartPageView: View {
         VStack(spacing: 16) {
             metricsRow(patient)
 
+            actionLaneCard
+
             if let appointment = nextAppointment {
                 infoCard(title: "Next Appointment", systemImage: "calendar.badge.clock", tint: .purple) {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(appointment.reasonForVisit)
                             .font(.subheadline.weight(.semibold))
+                            .clinicalRowSummaryText()
                         Text("\(appointment.scheduledTime.formatted(date: .abbreviated, time: .shortened)) • \(appointment.status)")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                            .clinicalFinePrint()
                         if let clinician = appointment.clinicianName {
                             Text("Clinician: \(clinician)")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                                .clinicalFinePrint()
+                        }
+                        HStack(spacing: 6) {
+                            ClinicalSourceBadge(descriptor: appointment.sourceDescriptor)
+                            SourceOfTruthBadge(authoritative: appointment.sourceDescriptor.authoritative)
                         }
                     }
                 }
@@ -414,6 +428,10 @@ struct PatientChartPageView: View {
                     NavigationLink(destination: ClinicIntelligenceView(patient: patient)) {
                         chartRow(label: "Clinical Intelligence", icon: "brain.head.profile", color: .blue)
                     }
+                    Divider().padding(.leading, 44)
+                    NavigationLink(destination: InteroperabilityWorkspaceView()) {
+                        chartRow(label: "EHR Connectivity", icon: "network", color: .teal)
+                    }
                 }
             }
 
@@ -422,6 +440,7 @@ struct PatientChartPageView: View {
                     Text("Use intelligence when you need synthesis across chart history, medications, and upcoming care. Default chart review should still begin in Visits and Medications.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+                        .clinicalRowSummaryText(lines: 3)
                 }
             }
         }
@@ -442,6 +461,7 @@ struct PatientChartPageView: View {
                     Text("\(patient.gender) · Age \(patient.age) · DOB \(patient.dateOfBirth.formatted(date: .abbreviated, time: .omitted))")
                         .font(.caption)
                         .foregroundColor(.secondary)
+                        .clinicalFinePrint()
                 }
                 Spacer()
             }
@@ -462,6 +482,8 @@ struct PatientChartPageView: View {
                     Spacer()
                 }
             }
+
+            ClinicalSourceSummaryRow(descriptor: patient.sourceDescriptor)
         }
         .padding()
         .background(chartPanelBackground)
@@ -472,6 +494,7 @@ struct PatientChartPageView: View {
             Text(label)
                 .font(.caption)
                 .foregroundColor(.secondary)
+                .clinicalFinePrint()
             Text(value)
                 .font(.subheadline)
         }
@@ -492,9 +515,11 @@ struct PatientChartPageView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(alert.title)
                             .font(.caption.bold())
+                            .clinicalFinePrint(weight: .bold)
                         Text(alert.message)
                             .font(.caption)
                             .foregroundColor(.secondary)
+                            .clinicalFinePrint()
                     }
                 }
             }
@@ -531,6 +556,66 @@ struct PatientChartPageView: View {
             metricTile(label: "Records", value: "\(patient.clinicalRecords?.count ?? 0)", icon: "doc.text", color: .blue)
             metricTile(label: "Active Rx", value: "\(activeMedications.count)", icon: "pills", color: .green)
             metricTile(label: "Appointments", value: "\(patient.appointments?.count ?? 0)", icon: "calendar", color: .purple)
+        }
+    }
+
+    private var actionLaneCard: some View {
+        infoCard(title: "Action Lane", systemImage: "checklist", tint: .indigo) {
+            VStack(spacing: 0) {
+                if let latestRecord {
+                    NavigationLink(destination: VisitRecordDetailView(record: latestRecord, patient: patient)) {
+                        actionLaneRow(
+                            label: "Review Note",
+                            detail: latestRecord.documentationLifecycle.label,
+                            icon: "doc.text",
+                            color: .indigo
+                        )
+                    }
+                } else {
+                    actionLaneRow(
+                        label: "Review Note",
+                        detail: "No note yet",
+                        icon: "doc.text",
+                        color: .indigo
+                    )
+                }
+                Divider().padding(.leading, 44)
+                NavigationLink(destination: RxListView(patient: patient)) {
+                    actionLaneRow(
+                        label: "Reconcile Meds",
+                        detail: activeMedications.isEmpty ? "No active medications" : "\(activeMedications.count) active medications",
+                        icon: "pills",
+                        color: .green
+                    )
+                }
+                Divider().padding(.leading, 44)
+                NavigationLink(destination: VisitHistoryView(patient: patient)) {
+                    actionLaneRow(
+                        label: "Confirm Follow-Up",
+                        detail: nextAppointment.map { $0.scheduledTime.formatted(date: .abbreviated, time: .shortened) } ?? "No future appointment",
+                        icon: "calendar.badge.clock",
+                        color: .purple
+                    )
+                }
+                Divider().padding(.leading, 44)
+                if let latestRecord {
+                    NavigationLink(destination: VisitRecordDetailView(record: latestRecord, patient: patient)) {
+                        actionLaneRow(
+                            label: "Patient Instructions",
+                            detail: (latestRecord.patientInstructions?.isEmpty == false) ? "Ready to review" : "Needs authoring",
+                            icon: "text.page",
+                            color: .blue
+                        )
+                    }
+                } else {
+                    actionLaneRow(
+                        label: "Patient Instructions",
+                        detail: "Needs note before instructions",
+                        icon: "text.page",
+                        color: .blue
+                    )
+                }
+            }
         }
     }
 
@@ -574,7 +659,11 @@ struct PatientChartPageView: View {
                     Text("Follow-up: \(followUp)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        .lineLimit(2)
+                        .clinicalRowSummaryText(lines: 2)
+                }
+                HStack(spacing: 6) {
+                    DocumentationStatusBadge(status: record.documentationLifecycle)
+                    ClinicalSourceBadge(descriptor: record.sourceDescriptor)
                 }
             }
             Spacer()
@@ -600,11 +689,41 @@ struct PatientChartPageView: View {
                     Text(indication)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .clinicalRowSummaryText(lines: 2)
+                }
+                HStack(spacing: 6) {
+                    ClinicalSourceBadge(descriptor: medication.sourceDescriptor)
+                    SourceOfTruthBadge(authoritative: medication.sourceDescriptor.authoritative)
                 }
             }
             Spacer()
         }
         .padding(.vertical, 6)
+    }
+
+    private func actionLaneRow(label: String, detail: String, icon: String, color: Color) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.body)
+                .foregroundColor(color)
+                .frame(width: 28)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label)
+                    .font(.subheadline)
+                    .foregroundColor(.primary)
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .clinicalFinePrint()
+                    .clinicalRowSummaryText()
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 12)
     }
 
     private func metricTile(label: String, value: String, icon: String, color: Color) -> some View {
@@ -617,6 +736,7 @@ struct PatientChartPageView: View {
             Text(label)
                 .font(.caption)
                 .foregroundColor(.secondary)
+                .clinicalMicroLabel()
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 12)

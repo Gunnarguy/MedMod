@@ -24,6 +24,13 @@ final class LocalClinicalRecord {
     var carePlanSummary: String?
     var icd10Code: String?
     var clinicalPhotoPaths: [String]?
+        var documentationStatus: String
+        var documentationSignedAt: Date?
+        var sourceKind: String
+        var sourceSystemName: String?
+        var sourceRecordIdentifier: String?
+        var sourceLastSyncedAt: Date?
+        var sourceOfTruth: Bool
     var patient: PatientProfile?
 
     init(recordID: String, dateRecorded: Date, conditionName: String, status: String, isHiddenFromPortal: Bool = false,
@@ -31,7 +38,14 @@ final class LocalClinicalRecord {
          ccHPI: String? = nil, reviewOfSystems: String? = nil, examFindings: String? = nil,
          impressionsAndPlan: String? = nil, affectedAnatomicalZones: [String]? = nil, providerSignature: String? = nil,
          patientInstructions: String? = nil, followUpPlan: String? = nil, recommendedOrders: [String]? = nil,
-         carePlanSummary: String? = nil, icd10Code: String? = nil, clinicalPhotoPaths: [String]? = nil) {
+            carePlanSummary: String? = nil, icd10Code: String? = nil, clinicalPhotoPaths: [String]? = nil,
+            documentationStatus: String = DocumentationLifecycleStatus.draft.rawValue,
+            documentationSignedAt: Date? = nil,
+            sourceKind: String = ClinicalSourceKind.manualEntry.rawValue,
+            sourceSystemName: String? = nil,
+            sourceRecordIdentifier: String? = nil,
+            sourceLastSyncedAt: Date? = nil,
+            sourceOfTruth: Bool = false) {
         self.recordID = recordID
         self.dateRecorded = dateRecorded
         self.conditionName = conditionName
@@ -51,5 +65,12 @@ final class LocalClinicalRecord {
         self.carePlanSummary = carePlanSummary
         self.icd10Code = icd10Code
         self.clinicalPhotoPaths = clinicalPhotoPaths
+        self.documentationStatus = documentationStatus
+        self.documentationSignedAt = documentationSignedAt
+        self.sourceKind = sourceKind
+        self.sourceSystemName = sourceSystemName
+        self.sourceRecordIdentifier = sourceRecordIdentifier
+        self.sourceLastSyncedAt = sourceLastSyncedAt
+        self.sourceOfTruth = sourceOfTruth
     }
 }

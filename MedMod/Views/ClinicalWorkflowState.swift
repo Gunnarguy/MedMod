@@ -7,6 +7,8 @@ final class ClinicalWorkflowState: ObservableObject {
     @Published var selectedAnatomy: String?
     @Published var generatedNote: ClinicalVisitNote?
     @Published var generatedPDFURL: URL?
+    @Published var savedRecordID: String?
+    @Published var lastSavedDocumentationStatus: DocumentationLifecycleStatus?
     @Published var isProcessing = false
 
     func reset() {
@@ -14,6 +16,8 @@ final class ClinicalWorkflowState: ObservableObject {
         selectedAnatomy = nil
         generatedNote = nil
         generatedPDFURL = nil
+        savedRecordID = nil
+        lastSavedDocumentationStatus = nil
         isProcessing = false
     }
 }

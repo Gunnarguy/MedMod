@@ -49,13 +49,15 @@ struct VisitHistoryView: View {
                                             Text(visitType)
                                                 .font(.caption)
                                                 .foregroundColor(.secondary)
+                                                .clinicalFinePrint()
                                         }
                                     }
                                     Spacer()
                                     VStack(alignment: .trailing, spacing: 4) {
                                         Text(record.status)
-                                            .font(.caption)
-                                            .padding(4)
+                                            .clinicalPillText(weight: .medium)
+                                            .padding(.horizontal, 5)
+                                            .padding(.vertical, 2)
                                             .background(record.status == "Final" ? Color.green.opacity(0.2) : Color.orange.opacity(0.2))
                                             .foregroundColor(record.status == "Final" ? .green : .orange)
                                             .cornerRadius(4)
@@ -63,17 +65,24 @@ struct VisitHistoryView: View {
                                             Text(severity)
                                                 .font(.caption2)
                                                 .foregroundColor(.secondary)
+                                                .clinicalFinePrint()
                                         }
                                     }
                                 }
                                 Text(record.dateRecorded, format: .dateTime.month().day().year())
                                     .font(.subheadline)
                                     .foregroundColor(.secondary)
+                                    .clinicalFinePrint()
+                                HStack(spacing: 6) {
+                                    DocumentationStatusBadge(status: record.documentationLifecycle)
+                                    ClinicalSourceBadge(descriptor: record.sourceDescriptor)
+                                }
                                 if let ccHPI = record.ccHPI, !ccHPI.isEmpty {
                                     Text(ccHPI)
                                         .font(.caption)
                                         .foregroundColor(.secondary)
-                                        .lineLimit(2)
+                                        .clinicalFinePrint()
+                                        .clinicalRowSummaryText(lines: 2)
                                 }
                             }
                             .padding(.vertical, 4)
@@ -96,29 +105,39 @@ struct VisitHistoryView: View {
                                 Spacer()
                                 VStack(alignment: .trailing, spacing: 4) {
                                     Text(appt.status)
-                                        .font(.caption)
-                                        .padding(4)
+                                        .clinicalPillText(weight: .medium)
+                                        .padding(.horizontal, 5)
+                                        .padding(.vertical, 2)
                                         .background(appt.status == "Scheduled" ? Color.blue.opacity(0.2) : Color.gray.opacity(0.2))
                                         .foregroundColor(appt.status == "Scheduled" ? .blue : .gray)
                                         .cornerRadius(4)
                                     Text(appt.checkInStatus ?? "")
                                         .font(.caption2)
                                         .foregroundColor(.secondary)
+                                        .clinicalFinePrint()
                                 }
                             }
                             Text(appt.scheduledTime, format: .dateTime.month().day().year().hour().minute())
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
+                                .clinicalFinePrint()
                             Text("\(appt.encounterType ?? "Follow-up") | \(appt.clinicianName ?? "")")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
+                                .clinicalFinePrint()
                             Text(appt.location ?? "")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
+                                .clinicalFinePrint()
+                            HStack(spacing: 6) {
+                                ClinicalSourceBadge(descriptor: appt.sourceDescriptor)
+                                SourceOfTruthBadge(authoritative: appt.sourceDescriptor.authoritative)
+                            }
                             if let linkedDiagnoses = appt.linkedDiagnoses, !linkedDiagnoses.isEmpty {
                                 Text("Linked: \(linkedDiagnoses.joined(separator: ", "))")
                                     .font(.caption2)
                                     .foregroundColor(.secondary)
+                                    .clinicalFinePrint()
                             }
                         }
                         .padding(.vertical, 4)
@@ -139,8 +158,10 @@ struct VisitHistoryView: View {
 struct VisitRecordDetailView: View {
     let record: LocalClinicalRecord
     let patient: PatientProfile
+    @Environment(\.modelContext) private var modelContext
     @State private var pdfURL: URL?
     @State private var showShareSheet = false
+    @State private var lifecycleUpdateMessage: String?
 
     var body: some View {
         ScrollView {
@@ -153,7 +174,18 @@ struct VisitRecordDetailView: View {
                     Spacer()
                     Text(record.dateRecorded, format: .dateTime.month().day().year())
                         .foregroundColor(.secondary)
+                        .clinicalFinePrint()
                 }
+
+                HStack(spacing: 6) {
+                    DocumentationStatusBadge(status: record.documentationLifecycle)
+                    ClinicalSourceBadge(descriptor: record.sourceDescriptor)
+                    SourceOfTruthBadge(authoritative: record.sourceDescriptor.authoritative)
+                }
+
+                ClinicalSourceSummaryRow(descriptor: record.sourceDescriptor, showAuthority: false)
+
+                documentationWorkflowCard
 
                 Divider()
 
@@ -180,6 +212,7 @@ struct VisitRecordDetailView: View {
                             Text("ICD-10: \(icd10)")
                                 .font(.caption.monospaced())
                                 .foregroundColor(.blue)
+                                .clinicalFinePrintMonospaced()
                         }
                         .padding(6)
                         .background(Color.blue.opacity(0.08))
@@ -226,14 +259,17 @@ struct VisitRecordDetailView: View {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(link.title)
                                         .font(.caption.bold())
+                                        .clinicalFinePrint(weight: .bold)
                                     Text(link.description)
                                         .font(.caption2)
                                         .foregroundColor(.secondary)
+                                        .clinicalFinePrint()
                                 }
                                 Spacer()
                                 Image(systemName: "chevron.right")
                                     .font(.caption2)
                                     .foregroundColor(.secondary)
+                                    .clinicalMicroLabel()
                             }
                             .padding(8)
                             .background(Color.teal.opacity(0.06))
@@ -248,11 +284,13 @@ struct VisitRecordDetailView: View {
                     Text("Status: \(record.status)")
                         .font(.caption)
                         .foregroundColor(.secondary)
+                        .clinicalFinePrint()
                     Spacer()
                     if let sig = record.providerSignature, !sig.isEmpty {
                         Text("Signed by: \(sig)")
                             .font(.caption)
                             .foregroundColor(.secondary)
+                            .clinicalFinePrint()
                     }
                 }
             }
@@ -302,6 +340,84 @@ struct VisitRecordDetailView: View {
             Text(content)
                 .font(.body)
         }
+    }
+
+    private var documentationWorkflowCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Documentation Workflow", systemImage: "signature")
+                .font(.subheadline.bold())
+                .foregroundColor(.indigo)
+
+            HStack(spacing: 8) {
+                workflowButton(title: "Draft", lifecycle: .draft, tint: .orange)
+                workflowButton(title: "Reviewed", lifecycle: .reviewed, tint: .blue)
+                workflowButton(title: "Sign", lifecycle: .signed, tint: .green)
+            }
+
+            if let signedAt = record.documentationSignedAt {
+                Text("Signed at \(signedAt.formatted(date: .abbreviated, time: .shortened))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            if let lifecycleUpdateMessage {
+                Text(lifecycleUpdateMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color(.secondarySystemGroupedBackground))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
+                )
+        )
+    }
+
+    private func workflowButton(title: String, lifecycle: DocumentationLifecycleStatus, tint: Color) -> some View {
+        Button(title) {
+            updateDocumentationLifecycle(to: lifecycle)
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(tint)
+        .disabled(record.documentationLifecycle == lifecycle)
+    }
+
+    private func updateDocumentationLifecycle(to lifecycle: DocumentationLifecycleStatus) {
+        record.documentationStatus = lifecycle.rawValue
+        record.status = lifecycle == .signed ? "Final" : "Preliminary"
+        record.documentationSignedAt = lifecycle == .signed ? .now : nil
+        record.providerSignature = lifecycle == .signed ? (patient.primaryClinician ?? record.providerSignature ?? "\(patient.fullName) Care Team") : nil
+        record.sourceLastSyncedAt = .now
+
+        try? modelContext.save()
+
+        if lifecycle == .signed {
+            pdfURL = generatePDFLocally(
+                patient: patient,
+                record: record,
+                details: ClinicalVisitNote(
+                    primaryDiagnosis: record.conditionName,
+                    ccHPI: record.ccHPI ?? record.conditionName,
+                    reviewOfSystems: record.reviewOfSystems ?? "",
+                    examFindings: record.examFindings ?? "",
+                    impressionsAndPlan: record.impressionsAndPlan ?? record.conditionName,
+                    patientInstructions: record.patientInstructions ?? "",
+                    followUpPlan: record.followUpPlan ?? "",
+                    recommendedOrders: record.recommendedOrders ?? [],
+                    medicationChanges: [],
+                    affectedAnatomicalZones: record.affectedAnatomicalZones ?? []
+                )
+            )
+        } else {
+            pdfURL = nil
+        }
+
+        lifecycleUpdateMessage = "Documentation status updated to \(lifecycle.label)."
     }
 }
 

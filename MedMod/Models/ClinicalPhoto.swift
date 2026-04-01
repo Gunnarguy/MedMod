@@ -9,6 +9,11 @@ final class ClinicalPhoto {
     var notes: String?
     var filePath: String
     var linkedRecordID: String?
+    var sourceKind: String
+    var sourceSystemName: String?
+    var sourceRecordIdentifier: String?
+    var sourceLastSyncedAt: Date?
+    var sourceOfTruth: Bool
 
     var patient: PatientProfile?
 
@@ -18,7 +23,12 @@ final class ClinicalPhoto {
         anatomicalRegion: String,
         notes: String? = nil,
         filePath: String,
-        linkedRecordID: String? = nil
+        linkedRecordID: String? = nil,
+        sourceKind: String = ClinicalSourceKind.clinicianCaptured.rawValue,
+        sourceSystemName: String? = nil,
+        sourceRecordIdentifier: String? = nil,
+        sourceLastSyncedAt: Date? = nil,
+        sourceOfTruth: Bool = true
     ) {
         self.id = id
         self.captureDate = captureDate
@@ -26,5 +36,10 @@ final class ClinicalPhoto {
         self.notes = notes
         self.filePath = filePath
         self.linkedRecordID = linkedRecordID
+        self.sourceKind = sourceKind
+        self.sourceSystemName = sourceSystemName
+        self.sourceRecordIdentifier = sourceRecordIdentifier
+        self.sourceLastSyncedAt = sourceLastSyncedAt
+        self.sourceOfTruth = sourceOfTruth
     }
 }

@@ -135,11 +135,17 @@ struct ClinicalPhotoView: View {
                 Text(photo.captureDate, format: .dateTime.month().day().year().hour().minute())
                     .font(.caption)
                     .foregroundColor(.secondary)
+                    .clinicalFinePrint()
+                HStack(spacing: 6) {
+                    ClinicalSourceBadge(descriptor: photo.sourceDescriptor)
+                    SourceOfTruthBadge(authoritative: photo.sourceDescriptor.authoritative)
+                }
                 if let notes = photo.notes, !notes.isEmpty {
                     Text(notes)
                         .font(.caption)
                         .foregroundColor(.secondary)
-                        .lineLimit(2)
+                        .clinicalFinePrint()
+                        .clinicalRowSummaryText(lines: 2)
                 }
             }
         }
@@ -159,7 +165,12 @@ struct ClinicalPhotoView: View {
             let photo = ClinicalPhoto(
                 anatomicalRegion: selectedRegion,
                 notes: noteText.isEmpty ? nil : noteText,
-                filePath: fileURL.path
+                filePath: fileURL.path,
+                sourceKind: ClinicalSourceKind.clinicianCaptured.rawValue,
+                sourceSystemName: "MedMod Capture Workspace",
+                sourceRecordIdentifier: filename,
+                sourceLastSyncedAt: .now,
+                sourceOfTruth: true
             )
             photo.patient = patient
             modelContext.insert(photo)
