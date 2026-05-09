@@ -7,7 +7,7 @@
 	<key>CFBundleName</key>
 	<string>$(PRODUCT_NAME)</string>
 	<key>CFBundleDisplayName</key>
-	<string>MedMod</string>
+	<string>OpenClinic</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>CFBundleShortVersionString</key>
@@ -22,10 +22,11 @@
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>com.gunnarhostetler.medmod.smart</string>
+			<string>com.gunnarhostetler.openclinic.smart</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>medmod</string>
+				<string>openclinic</string>
 			</array>
 		</dict>
 	</array>
